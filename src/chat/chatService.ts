@@ -205,6 +205,7 @@ interface RaidEntry {
   dueDate: string;
   daysPastDue: string;
   release: string;
+  deliverableId: string;
 }
 
 interface JiraSummary {
@@ -348,7 +349,9 @@ function searchContextIndex(text: string): string {
   const capIdRe = /\b([A-Z]{1,4}-(?:IF-|IP-)?[A-Z]{0,3}-?\d{2,3})\b/gi;
   const capIds = [...new Set((text.match(capIdRe) || []).map(m => m.toUpperCase()))];
 
-  if (systems.length === 0 && capIds.length === 0) return '';
+  // Program health queries (RAID, defects, RICEFW, CRs) don't need system/cap context
+  const programHealthRe = /\b(raid|risk|issue|action|blocker|defect|bug|test|ricefw|change request|CR\b|readiness|go.?no.?go)/i;
+  if (systems.length === 0 && capIds.length === 0 && !programHealthRe.test(text)) return '';
 
   const parts: string[] = [];
 
@@ -466,14 +469,37 @@ function searchContextIndex(text: string): string {
   if (raidKeywords.test(text) && contextIndex.raidIndex && contextIndex.raidIndex.length > 0) {
     let raidItems = contextIndex.raidIndex;
 
-    // Filter by tower if user mentioned one
+    // Filter by capability deliverable ID (exact match on Deliverable ID field)
+    if (capIds.length > 0) {
+      const capMatched = raidItems.filter(r =>
+        r.deliverableId && capIds.some(cid =>
+          r.deliverableId.toUpperCase().includes(cid)
+        )
+      );
+      if (capMatched.length > 0) {
+        raidItems = capMatched;
+      }
+      // If no deliverable ID match, fall through to tower filter below
+    }
+
+    // Filter by tower — explicit tower name OR derived from capability ID
     const towerRe = /\b(FPR|OTC[- ]?IF|OTC[- ]?IP|FTS[- ]?IF|FTS[- ]?IP|PTP|MDM|E2E)\b/i;
     const towerMatch = text.match(towerRe);
+    let towerFilter: string | null = null;
     if (towerMatch) {
-      const towerFilter = towerMatch[1].toUpperCase().replace(/\s+/g, ' ');
+      towerFilter = towerMatch[1].toUpperCase().replace(/\s+/g, ' ');
+    } else if (capIds.length > 0 && contextIndex.capabilities) {
+      // Derive tower from capability ID (e.g., DS-020 → FPR)
+      for (const cid of capIds) {
+        const cap = contextIndex.capabilities[cid];
+        if (cap?.tower) { towerFilter = cap.tower.toUpperCase(); break; }
+      }
+    }
+    if (towerFilter && raidItems.length === contextIndex.raidIndex.length) {
+      // Only apply tower filter if deliverableId filter didn't narrow it
       raidItems = raidItems.filter(r =>
-        r.team.toUpperCase().includes(towerFilter.replace('-', ' ')) ||
-        r.team.toUpperCase().includes(towerFilter)
+        r.team.toUpperCase().includes(towerFilter!.replace('-', ' ')) ||
+        r.team.toUpperCase().includes(towerFilter!)
       );
     }
 
