@@ -62,6 +62,29 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   { id: 'mermaid-sequence', category: 'Diagrams', icon: '⏱️',
     title: 'Sequence Diagram',
     prompt: 'Generate a Mermaid sequence diagram showing the message flow between systems for the primary integration chain in this capability.' },
+
+  // ── Program Health ──
+  { id: 'raid-summary', category: 'Program Health', icon: '⚠️',
+    title: 'RAID Summary',
+    prompt: 'Show me active RAID items — risks, issues, actions, and key decisions. Highlight P1/High severity items and anything past due.' },
+  { id: 'raid-tower', category: 'Program Health', icon: '🏗️',
+    title: 'RAID by Tower',
+    prompt: 'Show active RAID items for {Tower Name} tower. Group by type (Risk/Issue/Action) and highlight blockers.' },
+  { id: 'defect-status', category: 'Program Health', icon: '🐛',
+    title: 'Defect Status',
+    prompt: 'Give me the current defect summary — open defects by severity, aging buckets, and which towers have the most critical bugs open.' },
+  { id: 'test-coverage', category: 'Program Health', icon: '✅',
+    title: 'Test Execution',
+    prompt: 'Show test execution status across all towers — pass rates, failed tests, and blocked items. Flag any tower below 90% pass rate.' },
+  { id: 'release-readiness', category: 'Program Health', icon: '🚦',
+    title: 'Release Readiness',
+    prompt: 'Show release readiness status for all towers — GO/NO-GO indicator, closure rates, and critical/high defects still open.' },
+  { id: 'ricefw-status', category: 'Program Health', icon: '📊',
+    title: 'RICEFW Object Status',
+    prompt: 'Show RICEFW object summary — counts by type (R/I/C/E/F/W), tower distribution, and status of active (non-complete) objects.' },
+  { id: 'change-requests', category: 'Program Health', icon: '📋',
+    title: 'Change Requests',
+    prompt: 'Show active change requests — new and in-progress CRs with priority, requestor team, and impacted towers. Highlight high/very-high priority.' },
 ];
 
 export const TEMPLATE_CATEGORIES = [...new Set(PROMPT_TEMPLATES.map(t => t.category))];

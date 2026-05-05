@@ -155,6 +155,10 @@ interface ContextIndexMeta {
   systemCount: number;
   iapmMappedCount?: number;
   iapmUnmatchedCount?: number;
+  raidCount?: number;
+  ricefwTotal?: number;
+  ricefwActive?: number;
+  jiraFetchedAt?: string;
 }
 
 interface FlowEntry {
@@ -190,6 +194,75 @@ interface IapmSystemEntry {
   usedInFlows: boolean;
 }
 
+interface RaidEntry {
+  raidId: string;
+  type: string;
+  severity: string;
+  title: string;
+  status: string;
+  team: string;
+  subTeam: string;
+  dueDate: string;
+  daysPastDue: string;
+  release: string;
+}
+
+interface JiraSummary {
+  fetchedAt: string;
+  release: string;
+  defectSummary?: {
+    total: number;
+    open: number;
+    inProgress: number;
+    resolved: number;
+    critical: number;
+    bySeverity: Array<{ severity: string; open: number; in_progress: number; resolved: number; total: number }>;
+    aging: Array<{ bucket: string; critical: number; high: number; medium: number; low: number }>;
+  };
+  testSummary?: { total: number; passed: number; failed: number; blocked: number; not_run: number; pass_pct: number };
+  readinessSummary?: Record<string, unknown>;
+  towerReadiness?: Record<string, {
+    totalDefects: number; open: number; closed: number; closureRate: string;
+    criticalOpen: number; highOpen: number; goNogo: string;
+  }>;
+  towerDefects?: Record<string, { total: number; open: number; resolved: number }>;
+  towerTests?: Record<string, { total: number; passed: number; failed: number; blocked: number; not_run: number; pass_pct: number }>;
+}
+
+interface RicefwSummary {
+  total: number;
+  byType: Record<string, number>;
+  byTower: Record<string, number>;
+  byStatus: Record<string, number>;
+  activeCount: number;
+  activeObjects: Array<{
+    objectId: string; type: string; description: string;
+    tower: string; status: string; source: string; target: string;
+  }>;
+}
+
+interface ChangeRequestEntry {
+  changeId: string;
+  title: string;
+  priority: string;
+  status: string;
+  decision: string;
+  requestorTeam: string;
+  impactedTowers: string;
+  release: string;
+  raidRef: string;
+  complexity: string;
+}
+
+interface ChangeRequestSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  byDecision: Record<string, number>;
+  byPriority: Record<string, number>;
+  activeCount: number;
+  activeCRs: ChangeRequestEntry[];
+}
+
 interface ContextIndex {
   _meta: ContextIndexMeta;
   systems: string[];
@@ -197,6 +270,10 @@ interface ContextIndex {
   capabilities: Record<string, CapabilityEntry>;
   flowIndex: FlowEntry[];
   systemGraph: Record<string, Array<{ target: string; via: string; pattern: string; cap: string; tower: string; state: string }>>;
+  raidIndex?: RaidEntry[];
+  jiraSummary?: JiraSummary;
+  ricefwSummary?: RicefwSummary;
+  changeRequests?: ChangeRequestSummary;
 }
 
 let contextIndex: ContextIndex | null = null;
@@ -382,6 +459,203 @@ function searchContextIndex(text: string): string {
         }
       }
     }
+  }
+
+  // ── RAID Search ─────────────────────────────────────────────────────────
+  const raidKeywords = /\b(raid|risk|issue|action|blocker|roadblock|escalat|key decision)\b/i;
+  if (raidKeywords.test(text) && contextIndex.raidIndex && contextIndex.raidIndex.length > 0) {
+    let raidItems = contextIndex.raidIndex;
+
+    // Filter by tower if user mentioned one
+    const towerRe = /\b(FPR|OTC[- ]?IF|OTC[- ]?IP|FTS[- ]?IF|FTS[- ]?IP|PTP|MDM|E2E)\b/i;
+    const towerMatch = text.match(towerRe);
+    if (towerMatch) {
+      const towerFilter = towerMatch[1].toUpperCase().replace(/\s+/g, ' ');
+      raidItems = raidItems.filter(r =>
+        r.team.toUpperCase().includes(towerFilter.replace('-', ' ')) ||
+        r.team.toUpperCase().includes(towerFilter)
+      );
+    }
+
+    // Filter by severity if mentioned
+    if (/\b(p1|high|critical)\b/i.test(text)) {
+      raidItems = raidItems.filter(r => r.severity.includes('P1') || r.severity.toLowerCase().includes('high'));
+    } else if (/\b(p2|medium)\b/i.test(text)) {
+      raidItems = raidItems.filter(r => r.severity.includes('P2'));
+    }
+
+    // Filter by type if mentioned
+    if (/\brisk\b/i.test(text) && !/\b(raid|issue|action)\b/i.test(text)) {
+      raidItems = raidItems.filter(r => r.type === 'Risk');
+    } else if (/\bissue\b/i.test(text) && !/\b(raid|risk|action)\b/i.test(text)) {
+      raidItems = raidItems.filter(r => r.type === 'Issue');
+    } else if (/\baction\b/i.test(text) && !/\b(raid|risk|issue)\b/i.test(text)) {
+      raidItems = raidItems.filter(r => r.type === 'Action');
+    }
+
+    if (raidItems.length > 0) {
+      let section = `### Active RAID Items (${raidItems.length} matching)\n`;
+      section += '| RAID ID | Type | Severity | Title | Status | Team | Due Date | Days Past Due |\n';
+      section += '|---------|------|----------|-------|--------|------|----------|---------------|\n';
+      const maxRaid = Math.min(raidItems.length, 30);
+      for (let i = 0; i < maxRaid; i++) {
+        const r = raidItems[i];
+        section += `| ${r.raidId} | ${r.type} | ${r.severity} | ${r.title} | ${r.status} | ${r.team} | ${r.dueDate} | ${r.daysPastDue} |\n`;
+      }
+      if (raidItems.length > 30) section += `| … | | | ${raidItems.length - 30} more items | | | | |\n`;
+      parts.push(section);
+    }
+  }
+
+  // ── Defect / Bug Search ─────────────────────────────────────────────────
+  const defectKeywords = /\b(defect|bug|severity|critical|open defect|defect summary)\b/i;
+  if (defectKeywords.test(text) && contextIndex.jiraSummary?.defectSummary) {
+    const ds = contextIndex.jiraSummary.defectSummary;
+    let section = `### Defect Summary (${contextIndex.jiraSummary.release})\n`;
+    section += `**Total:** ${ds.total} | **Open:** ${ds.open} | **In Progress:** ${ds.inProgress} | **Resolved:** ${ds.resolved} | **Critical Total:** ${ds.critical}\n\n`;
+
+    if (ds.bySeverity && ds.bySeverity.length > 0) {
+      section += '| Severity | Open | In Progress | Resolved | Total |\n';
+      section += '|----------|------|-------------|----------|-------|\n';
+      for (const s of ds.bySeverity) {
+        section += `| ${s.severity} | ${s.open} | ${s.in_progress} | ${s.resolved} | ${s.total} |\n`;
+      }
+      section += '\n';
+    }
+
+    // Per-tower defects if available
+    if (contextIndex.jiraSummary.towerDefects) {
+      const towerMatch2 = text.match(/\b(FPR|OTC[- ]?IF|OTC[- ]?IP|FTS[- ]?IF|FTS[- ]?IP|PTP|MDM|E2E)\b/i);
+      if (towerMatch2) {
+        const tf = towerMatch2[1].toUpperCase().replace(/\s+/g, '-');
+        const td = contextIndex.jiraSummary.towerDefects[tf];
+        if (td) {
+          section += `\n**${tf} Defects:** Total ${td.total} | Open ${td.open} | Resolved ${td.resolved}\n`;
+        }
+      } else {
+        section += '\n| Tower | Total | Open | Resolved |\n';
+        section += '|-------|-------|------|----------|\n';
+        for (const [t, d] of Object.entries(contextIndex.jiraSummary.towerDefects)) {
+          section += `| ${t} | ${d.total} | ${d.open} | ${d.resolved} |\n`;
+        }
+      }
+    }
+    parts.push(section);
+  }
+
+  // ── Test Coverage / Testing Search ──────────────────────────────────────
+  const testKeywords = /\b(test|testing|pass rate|coverage|test case|execution|FUT)\b/i;
+  if (testKeywords.test(text) && contextIndex.jiraSummary?.towerTests) {
+    let section = '### Test Execution Summary\n';
+    section += '| Tower | Total | Passed | Failed | Blocked | Not Run | Pass % |\n';
+    section += '|-------|-------|--------|--------|---------|---------|--------|\n';
+    for (const [tower, t] of Object.entries(contextIndex.jiraSummary.towerTests)) {
+      section += `| ${tower} | ${t.total} | ${t.passed} | ${t.failed} | ${t.blocked} | ${t.not_run} | ${t.pass_pct}% |\n`;
+    }
+    parts.push(section);
+  }
+
+  // ── Release Readiness / Go-NoGo Search ──────────────────────────────────
+  const readinessKeywords = /\b(readiness|go.?no.?go|release|go live|go-live|cutover)\b/i;
+  if (readinessKeywords.test(text) && contextIndex.jiraSummary?.towerReadiness) {
+    let section = '### Release Readiness (per Tower)\n';
+    section += '| Tower | Total Defects | Open | Closed | Closure Rate | Critical Open | High Open | GO/NO-GO |\n';
+    section += '|-------|---------------|------|--------|--------------|---------------|-----------|----------|\n';
+    for (const [tower, r] of Object.entries(contextIndex.jiraSummary.towerReadiness)) {
+      section += `| ${tower} | ${r.totalDefects} | ${r.open} | ${r.closed} | ${r.closureRate} | ${r.criticalOpen} | ${r.highOpen} | **${r.goNogo}** |\n`;
+    }
+    parts.push(section);
+  }
+
+  // ── RICEFW Object Search ────────────────────────────────────────────────
+  const ricefwKeywords = /\b(ricefw|object|report|interface|conversion|enhancement|form|workflow|wricef|dev object)\b/i;
+  if (ricefwKeywords.test(text) && contextIndex.ricefwSummary) {
+    const rs = contextIndex.ricefwSummary;
+    let section = `### RICEFW Object Summary\n`;
+    section += `**Total:** ${rs.total} | **Active (non-complete):** ${rs.activeCount}\n\n`;
+
+    // By type
+    section += '| Type | Count |\n|------|-------|\n';
+    const typeLabels: Record<string, string> = { R: 'Report', I: 'Interface', C: 'Conversion', E: 'Enhancement', F: 'Form', W: 'Workflow' };
+    for (const [code, count] of Object.entries(rs.byType)) {
+      section += `| ${typeLabels[code] || code} (${code}) | ${count} |\n`;
+    }
+
+    // By tower (top entries)
+    const towerEntries = Object.entries(rs.byTower).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (towerEntries.length > 0) {
+      section += '\n| Tower | Objects |\n|-------|--------|\n';
+      for (const [t, c] of towerEntries) {
+        section += `| ${t} | ${c} |\n`;
+      }
+    }
+
+    // Active objects (non-complete) if user seems to want detail
+    if (/\b(active|in progress|dev|build|pending|open)\b/i.test(text) && rs.activeObjects.length > 0) {
+      section += `\n#### Active Objects (${rs.activeCount} total, showing top 20)\n`;
+      section += '| Object ID | Type | Description | Tower | Status | Source | Target |\n';
+      section += '|-----------|------|-------------|-------|--------|--------|--------|\n';
+      for (const obj of rs.activeObjects.slice(0, 20)) {
+        section += `| ${obj.objectId} | ${obj.type} | ${obj.description} | ${obj.tower} | ${obj.status} | ${obj.source} | ${obj.target} |\n`;
+      }
+      if (rs.activeCount > 20) section += `| … | | ${rs.activeCount - 20} more | | | | |\n`;
+    }
+    parts.push(section);
+  }
+
+  // ── Change Request Search ───────────────────────────────────────────────
+  const crKeywords = /\b(change request|CR|change id|scope change|new scope|design change|CCB)\b/i;
+  if (crKeywords.test(text) && contextIndex.changeRequests) {
+    const crs = contextIndex.changeRequests;
+    let section = `### Change Request Summary\n`;
+    section += `**Total:** ${crs.total} | **Active (New/In Progress):** ${crs.activeCount}\n\n`;
+
+    // By decision
+    section += '| Decision | Count |\n|----------|-------|\n';
+    for (const [d, c] of Object.entries(crs.byDecision)) {
+      section += `| ${d} | ${c} |\n`;
+    }
+
+    // By priority
+    section += '\n| Priority | Count |\n|----------|-------|\n';
+    for (const [p, c] of Object.entries(crs.byPriority)) {
+      section += `| ${p} | ${c} |\n`;
+    }
+
+    // Active CRs list
+    if (crs.activeCRs && crs.activeCRs.length > 0) {
+      let filtered = crs.activeCRs;
+
+      // Filter by tower if mentioned
+      const towerMatch3 = text.match(/\b(FPR|OTC[- ]?IF|OTC[- ]?IP|FTS[- ]?IF|FTS[- ]?IP|PTP|MDM|E2E)\b/i);
+      if (towerMatch3) {
+        const tf = towerMatch3[1].toUpperCase().replace(/\s+/g, '-');
+        filtered = filtered.filter(cr =>
+          cr.requestorTeam.toUpperCase().includes(tf.replace('-', ' ')) ||
+          cr.impactedTowers.toUpperCase().includes(tf)
+        );
+      }
+
+      // Filter by priority if mentioned
+      if (/\b(very high|critical|urgent)\b/i.test(text)) {
+        filtered = filtered.filter(cr => cr.priority.toLowerCase().includes('very high'));
+      } else if (/\bhigh\b/i.test(text)) {
+        filtered = filtered.filter(cr => cr.priority.toLowerCase().includes('high'));
+      }
+
+      if (filtered.length > 0) {
+        section += `\n#### Active Change Requests (${filtered.length} matching)\n`;
+        section += '| Change ID | Title | Priority | Team | Impacted Towers | Release | RAID Ref |\n';
+        section += '|-----------|-------|----------|------|-----------------|---------|----------|\n';
+        const maxCr = Math.min(filtered.length, 25);
+        for (let i = 0; i < maxCr; i++) {
+          const cr = filtered[i];
+          section += `| ${cr.changeId} | ${cr.title} | ${cr.priority} | ${cr.requestorTeam} | ${cr.impactedTowers} | ${cr.release} | ${cr.raidRef} |\n`;
+        }
+        if (filtered.length > 25) section += `| … | ${filtered.length - 25} more | | | | | |\n`;
+      }
+    }
+    parts.push(section);
   }
 
   const result = parts.join('\n\n---\n\n');
