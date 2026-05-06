@@ -223,6 +223,7 @@ const AutocompleteCellEditor = forwardRef(
           value={text}
           onChange={e => {
             setText(e.target.value);
+            committedRef.current = e.target.value; // Always sync so click-away persists
             setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}

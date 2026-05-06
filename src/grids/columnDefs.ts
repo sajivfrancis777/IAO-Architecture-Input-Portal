@@ -16,6 +16,7 @@ const STATUS_VALUES = ['Open', 'In Progress', 'Completed', 'Blocked', 'Deferred'
 // Simplified Flows dropdowns (14-column input — enrichment script fills the rest)
 const INTERFACE_VALUES = ['IDoc', 'RFC', 'BAPI', 'REST API', 'OData', 'SOAP', 'SFTP', 'File', 'CPI', 'PI/PO', 'MuleSoft', 'Kafka', 'DB Link', 'Manual', 'Other'];
 const CONFIDENCE_VALUES = ['High', 'Medium', 'Low'];
+const LANE_VALUES = ['SAP', 'S/4HANA', 'Integration', 'MuleSoft', 'Data', 'Snowflake', 'Data Warehouse', 'Application', 'Business', 'Technology', 'Infrastructure', 'Other'];
 const DB_PLATFORM_VALUES = DB_OPTIONS;
 const TECH_PLATFORM_VALUES = PLATFORM_OPTIONS;
 const INTEGRATION_PATTERN_VALUES = ['Point-to-Point', 'Hub-Spoke', 'Publish-Subscribe', 'Batch File', 'API Gateway', 'Database Link'];
@@ -109,11 +110,11 @@ const flowsColumns: (ColDef | ColGroupDef)[] = [
     children: [
       // AutocompleteCellEditor with isPopup()=true prevents stopEditingWhenCellsLoseFocus race
       { field: 'Source System', width: 240, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: ALL_SYSTEMS }, valueSetter: systemAutoFillSetter('Source DB Platform', 'Source Tech Platform') },
-      { field: 'Source Lane', width: 160 },
+      { field: 'Source Lane', width: 160, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: LANE_VALUES } },
       { field: 'Target System', width: 240, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: ALL_SYSTEMS }, valueSetter: systemAutoFillSetter('Target DB Platform', 'Target Tech Platform') },
-      { field: 'Target Lane', width: 160 },
-      { field: 'Interface / Technology', width: 220, ...selectEditor(INTERFACE_VALUES) },
-      { field: 'Frequency', width: 180, ...selectEditor(FREQUENCY_VALUES) },
+      { field: 'Target Lane', width: 160, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: LANE_VALUES } },
+      { field: 'Interface / Technology', width: 220, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: INTERFACE_VALUES } },
+      { field: 'Frequency', width: 180, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: FREQUENCY_VALUES } },
       { field: 'Data Description', width: 280 },
     ],
   },
@@ -121,17 +122,17 @@ const flowsColumns: (ColDef | ColGroupDef)[] = [
     headerName: 'Data Architecture',
     marryChildren: true,
     children: [
-      { field: 'Source DB Platform', width: 200, ...selectEditor(DB_PLATFORM_VALUES) },
-      { field: 'Target DB Platform', width: 200, ...selectEditor(DB_PLATFORM_VALUES) },
+      { field: 'Source DB Platform', width: 200, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: DB_PLATFORM_VALUES } },
+      { field: 'Target DB Platform', width: 200, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: DB_PLATFORM_VALUES } },
     ],
   },
   {
     headerName: 'Technology Architecture (optional — auto-filled if blank)',
     marryChildren: true,
     children: [
-      { field: 'Source Tech Platform', width: 220, ...selectEditor(TECH_PLATFORM_VALUES) },
-      { field: 'Target Tech Platform', width: 220, ...selectEditor(TECH_PLATFORM_VALUES) },
-      { field: 'Integration Pattern', width: 200, ...selectEditor(INTEGRATION_PATTERN_VALUES) },
+      { field: 'Source Tech Platform', width: 220, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: TECH_PLATFORM_VALUES } },
+      { field: 'Target Tech Platform', width: 220, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: TECH_PLATFORM_VALUES } },
+      { field: 'Integration Pattern', width: 200, cellEditor: AutocompleteCellEditor, cellEditorParams: { values: INTEGRATION_PATTERN_VALUES } },
     ],
   },
   {
