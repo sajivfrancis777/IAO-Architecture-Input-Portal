@@ -716,7 +716,7 @@ export default function App() {
     const flows = data['Flows'] ?? [];
     if (flows.length === 0) return ctx;
     ctx += `### Flows (${flows.length} rows)\n`;
-    const cols = ['Flow Chain', 'Hop #', 'Source System', 'Source Lane', 'Target System', 'Target Lane', 'Interface / Technology', 'Frequency', 'Source DB Platform', 'Target DB Platform', 'Source Tech Platform', 'Target Tech Platform'];
+    const cols = ['Flow Chain', 'Hop #', 'Source System', 'Source Lane', 'Target System', 'Target Lane', 'Interface / Technology', 'Frequency', 'Source DB Platform', 'Target DB Platform', 'Source Tech Platform', 'Target Tech Platform', 'Integration Pattern'];
     ctx += cols.join(' | ') + '\n';
     for (const row of flows.slice(0, 50)) { // Cap at 50 rows for token budget
       ctx += cols.map(c => String((row as Record<string, unknown>)[c] ?? '').trim()).join(' | ') + '\n';

@@ -39,6 +39,30 @@ You help architects across 8 towers: FPR, OTC-IF, OTC-IP, FTS-IF, FTS-IP, PTP, M
    - Edge labels go in pipes with quotes: A -->|"Direct / NRT"| B
    - Keep diagrams under 40 nodes for readability. For larger systems, split into multiple diagrams.
    - Do NOT use classDef or class styling — the renderer handles themes automatically.
+   **ARCHITECTURE DIAGRAM REQUESTS — MANDATORY TRIPLE:**
+   When asked for "architecture diagram", "integration diagram", or diagrams for a capability:
+   - You MUST produce **3 SEPARATE Mermaid diagrams** (never combined into one):
+     a. **Application Architecture** (heading: ### Application Architecture)
+        - Nodes = Source System / Target System from flow data
+        - Edges = labeled with Interface / Technology
+        - Group by Source Lane / Target Lane as subgraphs
+        - Use flowchart LR
+     b. **Data Architecture** (heading: ### Data Architecture)
+        - Nodes = Source DB Platform / Target DB Platform from flow data
+        - Show which application writes to / reads from each database
+        - Edges = data movement direction
+        - Use flowchart TD
+     c. **Technology Architecture** (heading: ### Technology Architecture)
+        - Nodes = Source Tech Platform / Target Tech Platform from flow data
+        - Edges = integration pattern (Point-to-Point, Hub-Spoke, etc.)
+        - Group by platform category (Cloud, On-Prem, SaaS, Middleware)
+        - Use flowchart LR
+   - **ONLY use systems, databases, and platforms that appear in the provided context data.**
+     Do NOT add systems that are not in the flow rows. If DB Platform or Tech Platform is blank
+     in the data, omit that node from the respective diagram (do not guess).
+   - Filter to the exact release + state the user requested.
+   - Before each diagram, state: "Based on X flow rows for [Capability] [Release] [State]."
+   - After all 3 diagrams, add a brief summary of key integration patterns observed.
 6. Reference specific systems, capabilities, and integration patterns when relevant.
 7. **File Explorer awareness:** You have access to the File Explorer contents for the current capability.
    - The "Available Files" section shows what data files, diagrams, BPMN files, and parsed extracts exist.
