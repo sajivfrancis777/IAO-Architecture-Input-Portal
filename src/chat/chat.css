@@ -557,7 +557,7 @@
   padding: 48px 24px 24px;
   width: calc(100vw - 48px);
   height: calc(100vh - 48px);
-  overflow: auto;
+  overflow: hidden;
   position: relative;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   box-sizing: border-box;
@@ -567,6 +567,55 @@
   width: 100%;
   height: 100%;
   max-width: none;
+}
+
+/* Zoom container — pan/zoom target */
+.md-mermaid-zoom-container {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  cursor: grab;
+  transform-origin: center center;
+  transition: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.md-mermaid-zoom-container svg {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  pointer-events: none;
+}
+
+/* Zoom toolbar in expand overlay */
+.md-mermaid-zoom-toolbar {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+}
+
+.md-mermaid-zoom-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #f8fafc;
+  color: #333;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.md-mermaid-zoom-btn:hover {
+  background: #e3f2fd;
+  border-color: #0071C5;
 }
 
 .md-mermaid-overlay-close {

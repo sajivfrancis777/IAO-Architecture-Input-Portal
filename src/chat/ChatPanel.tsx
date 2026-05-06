@@ -77,9 +77,7 @@ export default function ChatPanel({ open, onClose, gridContext, flowRows }: Chat
           // Use outerHTML so embedded <style> with scoped selectors
           // (classDef fill colors) are preserved in the clone.
           const wrapper = document.createElement('div');
-          wrapper.style.width = '100%';
-          wrapper.style.height = '100%';
-          wrapper.style.background = '#fff';
+          wrapper.className = 'md-mermaid-zoom-container';
           wrapper.innerHTML = svg.outerHTML;
           const clonedSvg = wrapper.querySelector('svg');
           if (clonedSvg) {
@@ -97,6 +95,30 @@ export default function ChatPanel({ open, onClose, gridContext, flowRows }: Chat
             clonedSvg.style.maxWidth = 'none';
           }
           contentDiv.appendChild(wrapper);
+
+          // ── Zoom & Pan ──
+          let scale = 1, panX = 0, panY = 0, isPanning = false, startX = 0, startY = 0;
+          const applyTransform = () => { wrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; };
+          wrapper.addEventListener('wheel', (e) => { e.preventDefault(); const delta = e.deltaY > 0 ? 0.9 : 1.1; scale = Math.min(Math.max(scale * delta, 0.2), 10); applyTransform(); }, { passive: false });
+          wrapper.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; isPanning = true; startX = e.clientX - panX; startY = e.clientY - panY; wrapper.setPointerCapture(e.pointerId); wrapper.style.cursor = 'grabbing'; });
+          wrapper.addEventListener('pointermove', (e) => { if (!isPanning) return; panX = e.clientX - startX; panY = e.clientY - startY; applyTransform(); });
+          wrapper.addEventListener('pointerup', (e) => { isPanning = false; wrapper.releasePointerCapture(e.pointerId); wrapper.style.cursor = 'grab'; });
+          // Double-click to reset
+          wrapper.addEventListener('dblclick', () => { scale = 1; panX = 0; panY = 0; applyTransform(); });
+
+          // Zoom toolbar
+          const zoomBar = document.createElement('div');
+          zoomBar.className = 'md-mermaid-zoom-toolbar';
+          zoomBar.innerHTML = '<button class="md-mermaid-zoom-btn" data-action="in" title="Zoom in">＋</button>' +
+            '<button class="md-mermaid-zoom-btn" data-action="out" title="Zoom out">－</button>' +
+            '<button class="md-mermaid-zoom-btn" data-action="reset" title="Reset zoom">⟳</button>';
+          zoomBar.addEventListener('click', (e) => {
+            const action = (e.target as HTMLElement).closest('[data-action]')?.getAttribute('data-action');
+            if (action === 'in') { scale = Math.min(scale * 1.25, 10); applyTransform(); }
+            else if (action === 'out') { scale = Math.max(scale * 0.8, 0.2); applyTransform(); }
+            else if (action === 'reset') { scale = 1; panX = 0; panY = 0; applyTransform(); }
+          });
+          contentDiv.appendChild(zoomBar);
         } else {
           const pre = document.createElement('pre');
           pre.className = 'md-pre';
