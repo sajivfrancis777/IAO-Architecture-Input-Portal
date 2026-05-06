@@ -31,24 +31,30 @@ export interface CapabilityInfo {
 
 export const CAPABILITIES: Record<string, CapabilityInfo[]> = {
   'FPR': [
-    { id: 'DS-020', name: 'DS-020 Product Costing' },
-    { id: 'DS-030', name: 'DS-030 Inventory Valuation' },
-    { id: 'DS-040', name: 'DS-040 Actual Costing / Material Ledger' },
-    { id: 'DS-050', name: 'DS-050 Profitability Analysis' },
-    { id: 'DS-060', name: 'DS-060 Cost Center Accounting' },
-    { id: 'DS-070', name: 'DS-070 Internal Orders' },
-    { id: 'DS-080', name: 'DS-080 Project Systems / WBS' },
-    { id: 'DS-090', name: 'DS-090 Fixed Assets' },
-    { id: 'DS-100', name: 'DS-100 General Ledger' },
-    { id: 'DS-110', name: 'DS-110 Accounts Payable' },
-    { id: 'DS-120', name: 'DS-120 Accounts Receivable' },
-    { id: 'DS-130', name: 'DS-130 Tax' },
-    { id: 'DS-140', name: 'DS-140 Treasury' },
-    { id: 'DS-150', name: 'DS-150 Consolidation / Group Reporting' },
-    { id: 'DS-160', name: 'DS-160 Planning / Budgeting' },
-    { id: 'DS-170', name: 'DS-170 Intercompany' },
-    { id: 'DS-180', name: 'DS-180 Revenue Recognition' },
-    { id: 'DS-190', name: 'DS-190 Bank Accounting' },
+    // DC — Manage Accounting and Control Data
+    { id: 'DC-010', name: 'DC-010 Perform Transaction Processing' },
+    { id: 'DC-020', name: 'DC-020 Manage the General Ledger' },
+    { id: 'DC-030', name: 'DC-030 Perform Closing' },
+    { id: 'DC-040', name: 'DC-040 Perform Fixed Asset Accounting' },
+    { id: 'DC-050', name: 'DC-050 Project Accounting' },
+    { id: 'DC-060', name: 'DC-060 Manage Taxes' },
+    { id: 'DC-100', name: 'DC-100 Revenue Recognition' },
+    { id: 'DC-110', name: 'DC-110 Manage Intercompany' },
+    { id: 'DC-120', name: 'DC-120 Maintenance & Management Accounting' },
+    // DS — Provide Decision Support
+    { id: 'DS-010', name: 'DS-010 Perform Overhead Accounting and Allocation' },
+    { id: 'DS-020', name: 'DS-020 Perform Product Costing and Inventory Valuation' },
+    { id: 'DS-030', name: 'DS-030 Perform Customer and Product Profitability Analysis' },
+    // MB — Plan and Manage Business
+    { id: 'MB-060', name: 'MB-060 Plan the Business' },
+    { id: 'MB-070', name: 'MB-070 Prepare Budgets' },
+    // MR — Manage Capital and Risk
+    { id: 'MR-010', name: 'MR-010 Manage Liquidity' },
+    { id: 'MR-020', name: 'MR-020 Manage Capital Structure' },
+    { id: 'MR-030', name: 'MR-030 Manage Financial Risk' },
+    { id: 'MR-070', name: 'MR-070 In-House Banking' },
+    // OR — Receivables Management
+    { id: 'OR-140', name: 'OR-140 Process Receipts' },
   ],
   'OTC-IF': [
     { id: 'L-010', name: 'L-010 Sales Order Management' },
