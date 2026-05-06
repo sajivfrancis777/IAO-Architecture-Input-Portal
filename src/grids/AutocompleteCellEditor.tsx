@@ -35,7 +35,6 @@ const AutocompleteCellEditor = forwardRef(
   (props: AutocompleteParams, ref) => {
     const { values = [], maxResults = 200 } = props;
     const [text, setText] = useState(String(props.value ?? ''));
-    const [selectedValue, setSelectedValue] = useState(String(props.value ?? ''));
     const [filtered, setFiltered] = useState<string[]>([]);
     const [selectedIdx, setSelectedIdx] = useState(-1);
     const [isOpen, setIsOpen] = useState(true);
@@ -108,7 +107,6 @@ const AutocompleteCellEditor = forwardRef(
     const commitValue = useCallback(
       (value: string) => {
         committedRef.current = value;  // Sync ref BEFORE stopEditing
-        setSelectedValue(value);
         setText(value);
         setIsOpen(false);
         props.onValueChange(value);  // <-- CRITICAL: notifies AG Grid
