@@ -13,6 +13,7 @@ import TabEditor from './components/TabEditor';
 import type { TabEditorHandle } from './components/TabEditor';
 import FileTree from './components/FileTree';
 import GitHubTokenModal from './components/GitHubTokenModal';
+import MultiTabUploadDialog from './components/MultiTabUploadDialog';
 import { AuthProvider } from './auth/AuthContext';
 import ChatFAB from './chat/ChatFAB';
 import HealthCheck from './chat/HealthCheck';
@@ -26,6 +27,7 @@ import type { CapabilityInputFiles } from './utils/githubFetch';
 import { saveToLocal, loadFromLocal, getLastSaved } from './utils/localSave';
 import { saveToGitHub, hasWriteToken } from './utils/githubSave';
 import { parseDiagram, buildHopsJson } from './utils/diagramParser';
+import type { HopSheet } from './utils/diagramParser';
 import { uploadDiagramToGitHub, uploadBpmnToGitHub, uploadHopsJsonToGitHub } from './utils/githubDiagramUpload';
 import type { WorkbookData } from './utils/xlsxUtils';
 import type { Release, FlowState } from './components/TowerSelector';
@@ -90,6 +92,13 @@ export default function App() {
   const [persistedRefresh, setPersistedRefresh] = useState(0);
   const [bpmnProcessSummaries, setBpmnProcessSummaries] = useState<string>('');
   const [dragOver, setDragOver] = useState<'xlsx' | 'diagram' | null>(null);
+  // Multi-tab upload dialog state
+  const [pendingUpload, setPendingUpload] = useState<{
+    sheets: HopSheet[];
+    file: File;
+    buffer: ArrayBuffer;
+    result: import('./utils/diagramParser').ParseResult;
+  } | null>(null);
 
   // Keep dirtyRef in sync for the async effect
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
@@ -386,56 +395,110 @@ export default function App() {
         return;
       }
 
-      // Determine which sheet to use — match current release/state, or use first
-      const matchingSheet = result.sheets.find(
-        s => s.release === release && s.state === state
-      ) ?? result.sheets[0];
-
-      // Merge into current grid: append to existing Flows rows
-      const currentData = editorRef.current?.flush() ?? createBlankWorkbook();
-      const existingFlows = (currentData['Flows'] ?? []).filter(
-        (row: Record<string, unknown>) =>
-          Object.values(row).some(v => v != null && v !== '')
-      );
-      const hopRows = matchingSheet.hops as unknown as Record<string, unknown>[];
-      const newFlows = [...existingFlows, ...hopRows];
-      currentData['Flows'] = newFlows;
-      editorRef.current?.loadData(currentData);
-      setDirty(true);
-
-      setDiagramStatus('uploading');
-      setDiagramMessage(`${result.totalHops} hops extracted — uploading to GitHub…`);
-
-      // Background: upload original diagram + hops JSON to GitHub
-      const hopsJson = buildHopsJson(result, file.name, tower, cap);
-      const [diagResult, hopsResult] = await Promise.all([
-        uploadDiagramToGitHub(tower, cap, file.name, buffer),
-        uploadHopsJsonToGitHub(tower, cap, hopsJson),
-      ]);
-
-      if (diagResult.ok && hopsResult.ok) {
-        setRecentUploads(prev => [...prev, { tower, cap, folder: 'uploads', filename: file.name }]);
-        setPersistedRefresh(n => n + 1);
-        setDiagramStatus('done');
-        setDiagramMessage(
-          `✓ ${result.totalHops} hops from ${result.totalChains} chains loaded into grid. Files saved to GitHub.`
-        );
-        setTimeout(() => { setDiagramStatus('idle'); setDiagramMessage(''); }, 6000);
-      } else {
-        // Grid was populated (that's the important part), GitHub save is bonus
-        setRecentUploads(prev => [...prev, { tower, cap, folder: 'uploads', filename: file.name }]);
-        setDiagramStatus('done');
-        const ghMsg = !diagResult.ok ? diagResult.message : hopsResult.message;
-        setDiagramMessage(
-          `✓ ${result.totalHops} hops loaded into grid. GitHub upload note: ${ghMsg}`
-        );
-        setTimeout(() => { setDiagramStatus('idle'); setDiagramMessage(''); }, 8000);
+      // If multiple tabs found, show selection dialog instead of silently picking one
+      if (result.sheets.length > 1) {
+        setPendingUpload({ sheets: result.sheets, file, buffer, result });
+        setDiagramStatus('idle');
+        setDiagramMessage('');
+        return;
       }
+
+      // Single tab — load directly
+      const sheet = result.sheets[0];
+      await loadSheetsIntoGrid([sheet], file, buffer, result);
     } catch (e) {
       setDiagramStatus('error');
       setDiagramMessage(`Error: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [tower, cap, release, state]);
+
+  /**
+   * Load selected sheets into grid + localStorage + GitHub.
+   * The tab matching current release/state goes into the grid;
+   * others are saved to their respective localStorage slots.
+   */
+  const loadSheetsIntoGrid = useCallback(async (
+    sheets: HopSheet[],
+    file: File,
+    buffer: ArrayBuffer,
+    result: import('./utils/diagramParser').ParseResult,
+  ) => {
+    // Find the sheet matching current selector (or first)
+    const currentSheet = sheets.find(
+      s => s.release === release && s.state === state
+    ) ?? sheets[0];
+
+    // Load the current-selection sheet into the grid
+    const currentData = editorRef.current?.flush() ?? createBlankWorkbook();
+    const existingFlows = (currentData['Flows'] ?? []).filter(
+      (row: Record<string, unknown>) =>
+        Object.values(row).some(v => v != null && v !== '')
+    );
+    const hopRows = currentSheet.hops as unknown as Record<string, unknown>[];
+    const newFlows = [...existingFlows, ...hopRows];
+    currentData['Flows'] = newFlows;
+    editorRef.current?.loadData(currentData);
+    setDirty(true);
+
+    // Save other tabs to their respective localStorage slots
+    for (const sheet of sheets) {
+      if (sheet === currentSheet) continue;
+      const sheetRelease = sheet.release === 'All' ? 'All' : sheet.release;
+      const sheetState = sheet.state as 'Current' | 'Future';
+      const slotData = loadFromLocal(tower, cap, sheetRelease as Release, sheetState) ?? createBlankWorkbook();
+      const slotFlows = (slotData['Flows'] ?? []).filter(
+        (row: Record<string, unknown>) =>
+          Object.values(row).some(v => v != null && v !== '')
+      );
+      slotData['Flows'] = [...slotFlows, ...(sheet.hops as unknown as Record<string, unknown>[])];
+      saveToLocal(tower, cap, sheetRelease as Release, sheetState, slotData);
+    }
+
+    const totalHops = sheets.reduce((sum, s) => sum + s.hops.length, 0);
+
+    setDiagramStatus('uploading');
+    setDiagramMessage(`${totalHops} hops from ${sheets.length} tab(s) extracted — uploading to GitHub…`);
+
+    // Upload original diagram + hops JSON to GitHub
+    const hopsJson = buildHopsJson(result, file.name, tower, cap);
+    const [diagResult, hopsResult] = await Promise.all([
+      uploadDiagramToGitHub(tower, cap, file.name, buffer),
+      uploadHopsJsonToGitHub(tower, cap, hopsJson),
+    ]);
+
+    if (diagResult.ok && hopsResult.ok) {
+      setRecentUploads(prev => [...prev, { tower, cap, folder: 'uploads', filename: file.name }]);
+      setPersistedRefresh(n => n + 1);
+      setDiagramStatus('done');
+      setDiagramMessage(
+        `✓ ${totalHops} hops from ${sheets.length} tab(s) loaded. ` +
+        `Current grid: ${currentSheet.tabName} (${currentSheet.hops.length} hops). Files saved to GitHub.`
+      );
+      setTimeout(() => { setDiagramStatus('idle'); setDiagramMessage(''); }, 8000);
+    } else {
+      setRecentUploads(prev => [...prev, { tower, cap, folder: 'uploads', filename: file.name }]);
+      setDiagramStatus('done');
+      const ghMsg = !diagResult.ok ? diagResult.message : hopsResult.message;
+      setDiagramMessage(
+        `✓ ${totalHops} hops loaded. GitHub note: ${ghMsg}`
+      );
+      setTimeout(() => { setDiagramStatus('idle'); setDiagramMessage(''); }, 8000);
+    }
+  }, [tower, cap, release, state]);
+
+  /** Handle multi-tab dialog selection */
+  const handleMultiTabSelect = useCallback(async (sheets: HopSheet[]) => {
+    if (!pendingUpload) return;
+    setPendingUpload(null);
+    setDiagramStatus('parsing');
+    await loadSheetsIntoGrid(sheets, pendingUpload.file, pendingUpload.buffer, pendingUpload.result);
+  }, [pendingUpload, loadSheetsIntoGrid]);
+
+  const handleMultiTabCancel = useCallback(() => {
+    setPendingUpload(null);
+    setDiagramStatus('idle');
+    setDiagramMessage('');
+  }, []);
 
   const handleTokenModalClose = useCallback(() => {
     setTokenModalOpen(false);
@@ -812,6 +875,17 @@ export default function App() {
 
       {/* GitHub token settings modal */}
       <GitHubTokenModal open={tokenModalOpen} onClose={handleTokenModalClose} />
+
+      {/* Multi-tab upload selection dialog */}
+      {pendingUpload && (
+        <MultiTabUploadDialog
+          sheets={pendingUpload.sheets}
+          currentRelease={release}
+          currentState={state}
+          onLoadSelected={handleMultiTabSelect}
+          onCancel={handleMultiTabCancel}
+        />
+      )}
 
       {/* AI Chat FAB + Profile */}
       <ChatFAB gridContext={buildGridContext()} />

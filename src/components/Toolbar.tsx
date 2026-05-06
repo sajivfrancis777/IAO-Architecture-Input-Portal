@@ -48,14 +48,15 @@ export default function Toolbar({
   const handleDownloadTemplate = (t: typeof TEMPLATES[number]) => {
     const link = document.createElement('a');
     link.href = `${import.meta.env.BASE_URL}templates/${t.file}`;
-    // Dynamic filename: {Tower}_{CapID}_{CapName}_Integration-Flows.ext
+    // Dynamic filename: {Tower}_{CapID}_{Release}_{State}_Integration-Flows.ext
     // README keeps its own name.
     if (t.ext !== '.md') {
       const capInfo = CAPABILITIES[tower]?.find(c => c.id === cap);
       const capLabel = capInfo
-        ? capInfo.name.split(/\s+/).slice(1).join('-')  // e.g. "Product-Costing" from "DS-020 Product Costing"
+        ? capInfo.name.split(/\s+/).slice(1).join('-')  // e.g. "Perform-Product-Costing" from "DS-020 Perform Product Costing"
         : cap;
-      link.download = `${tower}_${cap}_${capLabel}_Integration-Flows${t.ext}`;
+      const prefix = release === 'All' ? '' : `${release}_`;
+      link.download = `${tower}_${cap}_${capLabel}_${prefix}${state}_Integration-Flows${t.ext}`;
     } else {
       link.download = t.file;
     }
@@ -163,9 +164,9 @@ export default function Toolbar({
             <button
               className="btn btn-template"
               onClick={() => setTemplateOpen(!templateOpen)}
-              title="Download a pre-formatted diagram template with correctly named tabs for the parser"
+              title={`Download a diagram template scoped to ${release === 'All' ? '' : release + ' '}${state} — use the tab matching your selection`}
             >
-              📋 Download Template ▾
+              📋 Template ({release === 'All' ? state : `${release} ${state}`}) ▾
             </button>
             {templateOpen && (
               <ul className="template-dropdown">

@@ -234,7 +234,7 @@ const AutocompleteCellEditor = forwardRef(
             boxSizing: 'border-box',
             outline: 'none',
           }}
-          placeholder="Type to search systems…"
+          placeholder="Type any system name or select from list…"
         />
         {portalList}
       </div>

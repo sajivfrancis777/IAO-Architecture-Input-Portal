@@ -650,6 +650,11 @@ body {
   cursor: not-allowed;
 }
 
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
 .btn-primary {
   background: var(--intel-blue);
   color: white;
@@ -920,6 +925,86 @@ body {
 .modal-status.status-err {
   background: #fff5f5;
   color: #c53030;
+}
+
+/* ─── Multi-tab upload dialog ─── */
+.multi-tab-dialog {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+.multi-tab-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--intel-blue);
+}
+.multi-tab-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.multi-tab-actions-top {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.multi-tab-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.multi-tab-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background .15s;
+}
+.multi-tab-item:last-child { border-bottom: none; }
+.multi-tab-item:hover { background: #f5f9ff; }
+.multi-tab-item.multi-tab-current { background: #eef6ff; }
+.multi-tab-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.multi-tab-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+.multi-tab-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.multi-tab-badge {
+  font-size: 11px;
+  background: var(--intel-blue);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.multi-tab-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.multi-tab-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
 }
 
 .save-timestamp {
