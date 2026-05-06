@@ -222,8 +222,10 @@ const AutocompleteCellEditor = forwardRef(
           type="text"
           value={text}
           onChange={e => {
-            setText(e.target.value);
-            committedRef.current = e.target.value; // Always sync so click-away persists
+            const val = e.target.value;
+            setText(val);
+            committedRef.current = val; // Always sync so click-away persists
+            props.onValueChange(val);   // Mark cell dirty so AG Grid commits on focus loss
             setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
