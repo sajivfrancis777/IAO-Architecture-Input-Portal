@@ -5,6 +5,7 @@
  */
 import { useRef, useState } from 'react';
 import { CAPABILITIES } from '../data/towerRegistry';
+import { generateScopedDrawioTemplate } from '../utils/templateGenerator';
 
 const TEMPLATES: { label: string; file: string; ext: string }[] = [
   { label: 'Draw.io Template (.drawio)', file: 'integration-flows-template.drawio', ext: '.drawio' },
@@ -45,21 +46,40 @@ export default function Toolbar({
   const diagramRef = useRef<HTMLInputElement>(null);
   const [templateOpen, setTemplateOpen] = useState(false);
 
-  const handleDownloadTemplate = (t: typeof TEMPLATES[number]) => {
+  const handleDownloadTemplate = async (t: typeof TEMPLATES[number]) => {
+    const capInfo = CAPABILITIES[tower]?.find(c => c.id === cap);
+    const capLabel = capInfo
+      ? capInfo.name.split(/\s+/).slice(1).join('-')
+      : cap;
+    const prefix = release === 'All' ? '' : `${release}_`;
+    const filename = t.ext !== '.md'
+      ? `${tower}_${cap}_${capLabel}_${prefix}${state}_Integration-Flows${t.ext}`
+      : t.file;
+
+    // For .drawio templates, generate a scoped version (Instructions + matching tab only)
+    if (t.ext === '.drawio') {
+      try {
+        const scopedXml = await generateScopedDrawioTemplate(
+          release, state, import.meta.env.BASE_URL,
+        );
+        const blob = new Blob([scopedXml], { type: 'application/xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        setTemplateOpen(false);
+        return;
+      } catch {
+        // Fallback to static file if scoping fails
+      }
+    }
+
+    // Static file download (ArchiMate, Visio, README — or .drawio fallback)
     const link = document.createElement('a');
     link.href = `${import.meta.env.BASE_URL}templates/${t.file}`;
-    // Dynamic filename: {Tower}_{CapID}_{Release}_{State}_Integration-Flows.ext
-    // README keeps its own name.
-    if (t.ext !== '.md') {
-      const capInfo = CAPABILITIES[tower]?.find(c => c.id === cap);
-      const capLabel = capInfo
-        ? capInfo.name.split(/\s+/).slice(1).join('-')  // e.g. "Perform-Product-Costing" from "DS-020 Perform Product Costing"
-        : cap;
-      const prefix = release === 'All' ? '' : `${release}_`;
-      link.download = `${tower}_${cap}_${capLabel}_${prefix}${state}_Integration-Flows${t.ext}`;
-    } else {
-      link.download = t.file;
-    }
+    link.download = filename;
     link.click();
     setTemplateOpen(false);
   };
