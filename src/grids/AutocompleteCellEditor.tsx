@@ -44,6 +44,9 @@ const AutocompleteCellEditor = forwardRef(
     const listRef = useRef<HTMLDivElement>(null);
     const rootRef = useRef<HTMLDivElement>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+    // Ref mirrors selectedValue so getValue() returns the committed value
+    // synchronously even before React re-renders (fixes manual input revert bug)
+    const committedRef = useRef(String(props.value ?? ''));
 
     // Size dropdown to at least the cell width
     const cellWidth = props.eGridCell?.getBoundingClientRect().width ?? 0;
@@ -95,7 +98,7 @@ const AutocompleteCellEditor = forwardRef(
 
     // AG Grid editor interface — INLINE (isPopup false)
     useImperativeHandle(ref, () => ({
-      getValue: () => selectedValue,
+      getValue: () => committedRef.current,
       isPopup: () => false,
       isCancelBeforeStart: () => false,
       isCancelAfterEnd: () => false,
@@ -104,6 +107,7 @@ const AutocompleteCellEditor = forwardRef(
     /** Select a value — calls onValueChange to notify AG Grid */
     const commitValue = useCallback(
       (value: string) => {
+        committedRef.current = value;  // Sync ref BEFORE stopEditing
         setSelectedValue(value);
         setText(value);
         setIsOpen(false);
