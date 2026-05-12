@@ -25,7 +25,7 @@
   TIPS:
     - Use ApplicationComponent for software systems (SAP S/4HANA, MuleSoft, etc.)
     - Use Node for infrastructure/hardware if needed
-    - Use FlowRelationship for data flows, ServingRelationship for service calls
+    - Use xsi:type="Flow" for data flows, xsi:type="Serving" for service calls
     - ALWAYS label relationships with the interface technology
     - You can add/rename views — parser detects R1-R9, Wave, Phase, etc.
     - Delete unused release views if not needed
@@ -62,11 +62,11 @@
        The relationship NAME becomes "Interface / Technology" in the grid.
        ═══════════════════════════════════════════════════════════════ -->
   <relationships>
-    <relationship identifier="id-rel-001" xsi:type="FlowRelationship"
+    <relationship identifier="id-rel-001" xsi:type="Flow"
                   source="id-elem-source-example" target="id-elem-middleware-example">
       <name xml:lang="en">IDoc (replace with actual interface technology)</name>
     </relationship>
-    <relationship identifier="id-rel-002" xsi:type="FlowRelationship"
+    <relationship identifier="id-rel-002" xsi:type="Flow"
                   source="id-elem-middleware-example" target="id-elem-target-example">
       <name xml:lang="en">REST API (replace with actual interface technology)</name>
     </relationship>

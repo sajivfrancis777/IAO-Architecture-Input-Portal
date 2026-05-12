@@ -6,6 +6,7 @@
 import { useRef, useState } from 'react';
 import { CAPABILITIES } from '../data/towerRegistry';
 import { generateScopedDrawioTemplate } from '../utils/templateGenerator';
+import { generateScopedVisioTemplate } from '../utils/visioTemplateGenerator';
 
 const TEMPLATES: { label: string; file: string; ext: string }[] = [
   { label: 'Draw.io Template (.drawio)', file: 'integration-flows-template.drawio', ext: '.drawio' },
@@ -76,7 +77,28 @@ export default function Toolbar({
       }
     }
 
-    // Static file download (ArchiMate, Visio, README — or .drawio fallback)
+    // Static file download (ArchiMate, README — or .drawio/.vsdx fallback)
+    // For .vsdx templates, generate a scoped version (Instructions + matching tab only)
+    if (t.ext === '.vsdx') {
+      try {
+        const scopedData = await generateScopedVisioTemplate(
+          release, state, import.meta.env.BASE_URL,
+        );
+        const blob = new Blob([scopedData], { type: 'application/vnd.ms-visio.drawing' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        setTemplateOpen(false);
+        return;
+      } catch {
+        // Fallback to static file if scoping fails
+      }
+    }
+
+    // Static file download (ArchiMate, README — or fallback)
     const link = document.createElement('a');
     link.href = `${import.meta.env.BASE_URL}templates/${t.file}`;
     link.download = filename;
