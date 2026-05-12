@@ -301,6 +301,148 @@ function parseDrawio(xml: string): DiagramPage[] {
       }
     }
 
+    // ── Fallback: Spatial label resolution for unlabeled nodes ──
+    // Some diagrams use separate text cells overlaid on container boxes
+    // instead of setting the box's value attribute directly. For any node
+    // referenced by an edge but missing from the nodes map, try to resolve
+    // its label via: (1) child text cells, (2) spatial overlap matching.
+    if (edges.length > 0) {
+      const connectedIds = new Set<string>();
+      for (const edge of edges) {
+        connectedIds.add(edge.source);
+        connectedIds.add(edge.target);
+      }
+
+      const unlabeled = new Set<string>();
+      for (const cid of connectedIds) {
+        if (!nodes.has(cid)) unlabeled.add(cid);
+      }
+
+      if (unlabeled.size > 0) {
+        // Collect geometry and text cells for spatial matching
+        type CellGeo = { x: number; y: number; w: number; h: number };
+        const geoMap = new Map<string, CellGeo>();
+        const textCells: { id: string; label: string; geo: CellGeo }[] = [];
+
+        for (const cell of Array.from(cells)) {
+          const id = cell.getAttribute('id') || '';
+          const geo = cell.querySelector('mxGeometry');
+          if (geo && id) {
+            const g: CellGeo = {
+              x: parseFloat(geo.getAttribute('x') || '0'),
+              y: parseFloat(geo.getAttribute('y') || '0'),
+              w: parseFloat(geo.getAttribute('width') || '0'),
+              h: parseFloat(geo.getAttribute('height') || '0'),
+            };
+            geoMap.set(id, g);
+
+            // Identify text cells (potential floating labels)
+            const style = cell.getAttribute('style') || '';
+            const value = cell.getAttribute('value') || '';
+            const lbl = stripHtml(value);
+            if (lbl && style.includes('text;') && !cell.getAttribute('source')) {
+              textCells.push({ id, label: lbl, geo: g });
+            }
+          }
+        }
+
+        // Strategy 1: child text cells (parent matches the container)
+        for (const cid of unlabeled) {
+          for (const cell of Array.from(cells)) {
+            if (cell.getAttribute('parent') === cid) {
+              const val = stripHtml(cell.getAttribute('value') || '');
+              const style = cell.getAttribute('style') || '';
+              if (val && (style.includes('text;') || !style.includes('edgeLabel'))) {
+                nodes.set(cid, { id: cid, label: val });
+                break;
+              }
+            }
+          }
+        }
+
+        // Strategy 2: spatial overlap — find the best-fit text cell
+        // (closest text cell whose center is within the container bounds)
+        for (const cid of unlabeled) {
+          if (nodes.has(cid)) continue; // already resolved by Strategy 1
+          const box = geoMap.get(cid);
+          if (!box || box.w === 0 || box.h === 0) continue;
+
+          // Box center
+          const bCx = box.x + box.w / 2;
+          const bCy = box.y + box.h / 2;
+          let bestLabel = '';
+          let bestDist = Infinity;
+
+          for (const tc of textCells) {
+            // Text cell center
+            const tcx = tc.geo.x + tc.geo.w / 2;
+            const tcy = tc.geo.y + tc.geo.h / 2;
+            // Check if text center is within container bounds (10px tolerance)
+            if (
+              tcx >= box.x - 10 && tcx <= box.x + box.w + 10 &&
+              tcy >= box.y - 10 && tcy <= box.y + box.h + 10
+            ) {
+              // Prefer the text cell closest to the container's center
+              const dist = Math.hypot(tcx - bCx, tcy - bCy);
+              if (dist < bestDist) {
+                bestDist = dist;
+                bestLabel = tc.label;
+              }
+            }
+          }
+
+          if (bestLabel) {
+            nodes.set(cid, { id: cid, label: bestLabel });
+          }
+        }
+
+        // Strategy 3: parent-chain walk — for child shapes (e.g. database
+        // icons inside an application box), walk up the parent hierarchy
+        // to find the nearest ancestor that already has a resolved label.
+        // Build a parent map from all cells.
+        const parentMap = new Map<string, string>();
+        for (const cell of Array.from(cells)) {
+          const id = cell.getAttribute('id') || '';
+          const parent = cell.getAttribute('parent') || '';
+          if (id && parent) parentMap.set(id, parent);
+        }
+
+        for (const cid of unlabeled) {
+          if (nodes.has(cid)) continue; // already resolved
+          let pid = parentMap.get(cid);
+          let depth = 0;
+          while (pid && depth < 5) {
+            if (nodes.has(pid)) {
+              nodes.set(cid, { id: cid, label: nodes.get(pid)!.label });
+              break;
+            }
+            pid = parentMap.get(pid);
+            depth++;
+          }
+        }
+
+        // Strategy 4: sibling label — if a node's parent has a text child
+        // (sibling with text; style), use that sibling's label.
+        for (const cid of unlabeled) {
+          if (nodes.has(cid)) continue;
+          const myParent = parentMap.get(cid);
+          if (!myParent) continue;
+
+          // Find siblings (cells with same parent) that are text labels
+          for (const cell of Array.from(cells)) {
+            if (cell.getAttribute('parent') === myParent && cell.getAttribute('id') !== cid) {
+              const style = cell.getAttribute('style') || '';
+              const val = stripHtml(cell.getAttribute('value') || '');
+              if (val && style.includes('text;')) {
+                nodes.set(cid, { id: cid, label: val });
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (edges.length > 0) {
       pages.push({ name: pageName, nodes, edges });
     }
@@ -375,32 +517,85 @@ function parseArchiMate(xml: string): DiagramPage[] {
   const nodes = new Map<string, GraphNode>();
   const edges: GraphEdge[] = [];
 
-  // ArchiMate: <element> for nodes, <relationship> for edges
-  const elements = doc.querySelectorAll('element');
-  for (const el of Array.from(elements)) {
+  // ArchiMate Open Exchange uses a default namespace which breaks
+  // querySelectorAll (CSS selectors don't support default namespaces).
+  // Use getElementsByTagNameNS with wildcard, or strip namespace and retry.
+  // Strategy: try querySelectorAll first (no-namespace XML), then fallback
+  // to getElementsByTagNameNS('*', 'element') for namespaced documents.
+  let elements = Array.from(doc.querySelectorAll('element'));
+  if (elements.length === 0) {
+    // Namespace-aware fallback — '*' matches any namespace
+    elements = Array.from(doc.getElementsByTagNameNS('*', 'element'));
+  }
+
+  for (const el of elements) {
     const id = el.getAttribute('identifier') || el.getAttribute('id') || '';
     // ArchiMate uses <name> child elements or name attribute
-    const nameEl = el.querySelector('name');
+    // getElementsByTagNameNS needed here too for <name> in a namespace
+    const nameEls = el.getElementsByTagNameNS('*', 'name');
+    const nameEl = nameEls.length > 0 ? nameEls[0] : el.querySelector('name');
     const label = nameEl?.textContent || el.getAttribute('name') || el.getAttribute('label') || '';
     if (id && label) {
-      nodes.set(id, { id, label });
+      nodes.set(id, { id, label: label.trim() });
     }
   }
 
-  const relationships = doc.querySelectorAll('relationship');
-  for (const rel of Array.from(relationships)) {
+  let relationships = Array.from(doc.querySelectorAll('relationship'));
+  if (relationships.length === 0) {
+    relationships = Array.from(doc.getElementsByTagNameNS('*', 'relationship'));
+  }
+
+  for (const rel of relationships) {
     const source = rel.getAttribute('source') || '';
     const target = rel.getAttribute('target') || '';
     const type = rel.getAttribute('xsi:type') || rel.getAttribute('type') || '';
-    // Filter to flow/serving/triggering relationships (most relevant for integration)
-    const relType = type.replace(/.*:/, ''); // strip namespace
-    const label = relType || '';
+    // Use relationship name if present (architect-labeled interface technology)
+    const nameEls = rel.getElementsByTagNameNS('*', 'name');
+    const nameLabel = nameEls.length > 0 ? (nameEls[0].textContent || '').trim() : '';
+    // Fall back to relationship type if no name
+    const relType = type.replace(/.*:/, ''); // strip namespace prefix
+    const label = nameLabel || relType || '';
     if (source && target) {
       edges.push({ source, target, label });
     }
   }
 
-  if (edges.length > 0) {
+  // If views exist, try to create per-view pages for release/state detection
+  let views: Element[] = Array.from(doc.querySelectorAll('view'));
+  if (views.length === 0) {
+    views = Array.from(doc.getElementsByTagNameNS('*', 'view'));
+  }
+
+  if (views.length > 0 && edges.length > 0) {
+    // Map view nodes to their element references
+    for (const view of views) {
+      const nameEls = view.getElementsByTagNameNS('*', 'name');
+      const viewName = nameEls.length > 0
+        ? (nameEls[0].textContent || '').trim()
+        : (view.getAttribute('name') || view.getAttribute('identifier') || 'ArchiMate View');
+
+      // Collect element refs in this view (viewNode → elementRef)
+      const viewNodeEls = view.getElementsByTagNameNS('*', 'node');
+      const viewElementIds = new Set<string>();
+      for (const vn of Array.from(viewNodeEls)) {
+        const ref = vn.getAttribute('elementRef') || vn.getAttribute('elementref') || '';
+        if (ref) viewElementIds.add(ref);
+      }
+
+      // If view has element refs, filter edges to those involving view elements
+      if (viewElementIds.size > 0) {
+        const viewEdges = edges.filter(
+          e => viewElementIds.has(e.source) || viewElementIds.has(e.target)
+        );
+        if (viewEdges.length > 0) {
+          pages.push({ name: viewName, nodes, edges: viewEdges });
+        }
+      }
+    }
+  }
+
+  // Fallback: if no view-based pages were created, use all edges as one page
+  if (pages.length === 0 && edges.length > 0) {
     pages.push({ name: 'ArchiMate Model', nodes, edges });
   }
 
