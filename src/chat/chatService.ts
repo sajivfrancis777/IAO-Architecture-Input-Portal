@@ -102,7 +102,11 @@ You help architects across 8 towers: FPR, OTC-IF, OTC-IP, FTS-IF, FTS-IP, PTP, M
    - \`jira_search\`: Look up a specific issue/test case by key (IAODTM-C43670, IAODTM-12345) or search by text/JQL
    - \`jira_test_cases\`: Query Zephyr Scale test cases by tower, capability, release, or phase
    - \`jira_defects\`: Query bugs with severity/status/tower filters
-   **When the user asks about a specific JIRA ticket or wants live data not in the static context, USE these tools.** Do NOT say "I cannot access JIRA" — call the appropriate tool instead.
+   - \`jira_test_case_detail\`: **BATCH enrichment** — get full details (description, objective, status, steps, approval info) for many test cases at once. Use when:
+     • User asks for details on all test cases in a cycle → pass cycle_key
+     • User wants descriptions/status for specific test case keys → pass test_case_keys array
+     • User says "pull details for these", "show me the descriptions", "why are they not approved"
+   **When the user asks about a specific JIRA ticket or wants live data not in the static context, USE these tools.** Do NOT say "I cannot access JIRA" or "I don't have enough context" — call the appropriate tool instead. For batch queries involving multiple test cases, ALWAYS use jira_test_case_detail (never loop jira_search one at a time).
 8. **BPMN PROCESS LISTING — MANDATORY FORMAT:**
    When the user asks to "list", "show all", or "show BPMN" business processes:
    - You MUST output each process as a MARKDOWN LINK in this EXACT format:
@@ -236,6 +240,22 @@ const JIRA_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'jira_test_case_detail',
+      description: 'Get enriched test case details (description, objective, status, steps, approval info) for a batch of test cases. Use when the user asks about specific test case details, wants descriptions/objectives for multiple test cases, or asks to drill into a test cycle\'s linked cases. Accepts a cycle_key (IAODTM-C...) to fetch ALL test cases in that cycle, or a list of test_case_keys (IAODTM-T...) for specific lookups. Returns full details including steps, tower doc links, and status. ALWAYS use this tool (not jira_search) when the user wants details for multiple test cases at once.',
+      parameters: {
+        type: 'object',
+        properties: {
+          cycle_key: { type: 'string', description: 'Test cycle key (e.g. IAODTM-C43670). Fetches the cycle then enriches ALL linked test cases.' },
+          test_case_keys: { type: 'array', items: { type: 'string' }, description: 'Array of test case keys (e.g. ["IAODTM-T69796", "IAODTM-T91787"]). Use when you already have specific keys.' },
+          include_steps: { type: 'boolean', description: 'Include test script steps in response (default true). Set false for summary-only.' },
+          max_cases: { type: 'number', description: 'Max test cases to enrich (default 100, max 200).' },
+        },
+      },
+    },
+  },
 ];
 
 /** Execute a JIRA tool call via the proxy server. */
@@ -244,6 +264,7 @@ async function executeJiraTool(name: string, args: Record<string, unknown>): Pro
     jira_search: '/api/jira/search',
     jira_test_cases: '/api/jira/test-cases',
     jira_defects: '/api/jira/defects',
+    jira_test_case_detail: '/api/jira/test-case-detail',
   };
   const path = endpointMap[name];
   if (!path) return JSON.stringify({ error: `Unknown tool: ${name}` });
