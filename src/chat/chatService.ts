@@ -227,14 +227,15 @@ const JIRA_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'jira_defects',
-      description: 'Query JIRA bugs/defects with severity, status, and tower filters. Use when the user asks about open defects, bug counts, or defect details beyond what the static summary provides.',
+      description: 'Query JIRA bugs/defects with severity, status, tower, and test phase filters. Use when the user asks about open defects, bug counts, or defect details beyond what the static summary provides.',
       parameters: {
         type: 'object',
         properties: {
           tower: { type: 'string', description: 'Tower shortcode for filtering.' },
           severity: { type: 'string', description: 'Severity filter (Critical, High, Medium, Low).' },
           status: { type: 'string', description: 'Status filter (Open, In Progress, Resolved, Closed).' },
-          release: { type: 'string', description: 'Release filter. Default: Release 3.' },
+          release: { type: 'string', description: 'Release filter (R3, R4, R5). Default: R3.' },
+          test_phase: { type: 'string', description: 'Test phase/cycle filter (MC1, MC2, ITC1, ITC2, UAT, E2E).' },
           max_results: { type: 'number', description: 'Max results (default 50).' },
         },
       },
