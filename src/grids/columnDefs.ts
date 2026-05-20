@@ -34,8 +34,9 @@ function systemAutoFillSetter(dbField: string, platField: string) {
     const sys = String(params.newValue || '');
     const defaults = getPlatformDefaults(sys);
     if (defaults) {
-      if (!params.data[dbField]) params.data[dbField] = defaults.db;
-      if (!params.data[platField]) params.data[platField] = defaults.platform;
+      // Always overwrite DB/Platform when system name changes — canonical data wins
+      if (defaults.db) params.data[dbField] = defaults.db;
+      if (defaults.platform) params.data[platField] = defaults.platform;
     }
     // Refresh auto-filled neighbor cells so the UI shows new values immediately
     if (defaults && params.api) {
