@@ -108,3 +108,32 @@ export function getPlatformDefaults(systemName: string): { db: string; platform:
 export function isPlatformCacheReady(): boolean {
   return _cache !== null;
 }
+
+/**
+ * Re-enrich flow rows: overwrite Source/Target DB Platform and Tech Platform
+ * with canonical values from SYSTEM_DEFAULTS or the remote platform cache.
+ * Only overwrites if a canonical entry exists for the system name.
+ * Returns the number of cells corrected.
+ */
+export function enrichFlowPlatforms(rows: Record<string, unknown>[]): number {
+  let corrected = 0;
+  for (const row of rows) {
+    const src = String(row['Source System'] || '');
+    const tgt = String(row['Target System'] || '');
+    if (src) {
+      const d = getPlatformDefaults(src);
+      if (d) {
+        if (d.db && row['Source DB Platform'] !== d.db) { row['Source DB Platform'] = d.db; corrected++; }
+        if (d.platform && row['Source Tech Platform'] !== d.platform) { row['Source Tech Platform'] = d.platform; corrected++; }
+      }
+    }
+    if (tgt) {
+      const d = getPlatformDefaults(tgt);
+      if (d) {
+        if (d.db && row['Target DB Platform'] !== d.db) { row['Target DB Platform'] = d.db; corrected++; }
+        if (d.platform && row['Target Tech Platform'] !== d.platform) { row['Target Tech Platform'] = d.platform; corrected++; }
+      }
+    }
+  }
+  return corrected;
+}

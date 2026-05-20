@@ -11,6 +11,7 @@ import { TAB_DEFINITIONS, defaultColDef } from '../grids/columnDefs';
 import { useGridClipboard } from '../hooks/useGridClipboard';
 import type { GridClipboardEvent } from '../hooks/useGridClipboard';
 import type { WorkbookData } from '../utils/xlsxUtils';
+import { enrichFlowPlatforms } from '../utils/platformLookup';
 import type { ColDef, ColGroupDef, CellValueChangedEvent, GridReadyEvent } from 'ag-grid-community';
 import DiagramPreview from './DiagramPreview';
 import type { FlowRow } from '../utils/flowsToMermaid';
@@ -139,6 +140,11 @@ const TabEditor = forwardRef<TabEditorHandle, TabEditorProps>(
       return { ...tabCache.current };
     },
     loadData: (newData: WorkbookData): void => {
+      // Enrich Flows tab with canonical DB/Platform values on load
+      if (newData['Flows'] && Array.isArray(newData['Flows'])) {
+        const corrected = enrichFlowPlatforms(newData['Flows'] as Record<string, unknown>[]);
+        if (corrected > 0) console.info(`[ADA] Enriched ${corrected} platform cells on load`);
+      }
       // Replace entire cache and reload the visible tab
       tabCache.current = { ...newData };
       if (gridApiReady.current) {
