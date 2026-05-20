@@ -26,6 +26,7 @@ import { resolveFilePath, resolveCapabilityBasePath, fetchFileContent, parseFile
 import type { CapabilityInputFiles } from './utils/githubFetch';
 import { saveToLocal, loadFromLocal, getLastSaved } from './utils/localSave';
 import { saveToGitHub, hasWriteToken } from './utils/githubSave';
+import { loadPlatformCache } from './utils/platformLookup';
 import { parseDiagram, buildHopsJson } from './utils/diagramParser';
 import type { HopSheet } from './utils/diagramParser';
 import { uploadDiagramToGitHub, uploadBpmnToGitHub, uploadHopsJsonToGitHub } from './utils/githubDiagramUpload';
@@ -102,6 +103,9 @@ export default function App() {
 
   // Keep dirtyRef in sync for the async effect
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
+
+  // Pre-load the remote platform cache (12K+ systems) for auto-fill lookups
+  useEffect(() => { loadPlatformCache(); }, []);
 
   // Fetch persisted files (uploads/bpmn/extracts) from GitHub when tower/cap changes or after upload
   useEffect(() => {

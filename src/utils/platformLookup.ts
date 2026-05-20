@@ -23,6 +23,7 @@ export interface PlatformEntry {
   platform: string;
   hosting?: string;
   iapmId?: number;
+  parentIapmId?: number;
 }
 
 interface PlatformCache {

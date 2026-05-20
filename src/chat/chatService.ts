@@ -107,6 +107,7 @@ You help architects across 8 towers: FPR, OTC-IF, OTC-IP, FTS-IF, FTS-IP, PTP, M
      • User wants descriptions/status for specific test case keys → pass test_case_keys array
      • User says "pull details for these", "show me the descriptions", "why are they not approved"
    **When the user asks about a specific JIRA ticket or wants live data not in the static context, USE these tools.** Do NOT say "I cannot access JIRA" or "I don't have enough context" — call the appropriate tool instead. For batch queries involving multiple test cases, ALWAYS use jira_test_case_detail (never loop jira_search one at a time).
+   **CRITICAL: When the user confirms a query scope or says "yes", "go ahead", "proceed", or "go with the defaults", IMMEDIATELY call the tool with the stated parameters. Do NOT ask for further confirmation or say "I need to query" — just execute the tool call in the same turn. Never respond with "I'm ready to pull" without actually pulling.**
 8. **BPMN PROCESS LISTING — MANDATORY FORMAT:**
    When the user asks to "list", "show all", or "show BPMN" business processes:
    - You MUST output each process as a MARKDOWN LINK in this EXACT format:
@@ -232,7 +233,7 @@ const JIRA_TOOLS = [
         type: 'object',
         properties: {
           tower: { type: 'string', description: 'Tower shortcode for filtering.' },
-          severity: { type: 'string', description: 'Severity filter (Critical, High, Medium, Low).' },
+          severity: { type: 'string', description: 'Severity filter — single value or comma-separated (e.g. "Critical", "Critical,High"). Accepted values: Critical, High, Medium, Low.' },
           status: { type: 'string', description: 'Status filter (Open, In Progress, Resolved, Closed).' },
           release: { type: 'string', description: 'Release filter (R3, R4, R5). Default: R3.' },
           test_phase: { type: 'string', description: 'Test phase/cycle filter (MC1, MC2, ITC1, ITC2, UAT, E2E).' },
