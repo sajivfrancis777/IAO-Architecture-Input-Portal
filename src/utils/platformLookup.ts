@@ -24,6 +24,7 @@ export interface PlatformEntry {
   hosting?: string;
   iapmId?: number;
   parentIapmId?: number;
+  confidence?: 'iapm' | 'enriched' | 'assumed';
 }
 
 interface PlatformCache {
