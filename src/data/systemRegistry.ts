@@ -6,7 +6,7 @@
  * ALL_SYSTEMS:   4953 total (known + 4888 active IAPM apps)
  * DB_OPTIONS:    14 approved database platforms
  * PLATFORM_OPTIONS: 12 approved tech platforms
- * SYSTEM_DEFAULTS: 43 system -> DB/Platform auto-fill mappings
+ * SYSTEM_DEFAULTS: 45 system -> DB/Platform auto-fill mappings
  */
 
 /** Systems already used in existing architecture flow files. */
@@ -5104,7 +5104,7 @@ export const SYSTEM_DEFAULTS: Record<string, { db: string; platform: string }> =
     "platform": "SAP HEC (On-Prem)"
   },
   "SAP ECC": {
-    "db": "Oracle DB",
+    "db": "SAP HANA",
     "platform": "SAP On-Prem (Linux)"
   },
   "SAP ICX": {
@@ -5132,6 +5132,14 @@ export const SYSTEM_DEFAULTS: Record<string, { db: string; platform: string }> =
     "platform": "SAP Cloud (SaaS)"
   },
   "SAP BOBJ": {
+    "db": "SAP HANA",
+    "platform": "SAP On-Prem (Linux)"
+  },
+  "SAP BODS": {
+    "db": "SAP HANA",
+    "platform": "SAP On-Prem (Linux)"
+  },
+  "SAP PO": {
     "db": "SAP HANA",
     "platform": "SAP On-Prem (Linux)"
   },
@@ -5172,7 +5180,7 @@ export const SYSTEM_DEFAULTS: Record<string, { db: string; platform: string }> =
     "platform": "On-Prem (Linux)"
   },
   "XEUS": {
-    "db": "PostgreSQL",
+    "db": "Oracle DB",
     "platform": "On-Prem (Linux)"
   },
   "PEGA": {
@@ -5184,8 +5192,8 @@ export const SYSTEM_DEFAULTS: Record<string, { db: string; platform: string }> =
     "platform": "On-Prem (Windows)"
   },
   "ICOST": {
-    "db": "Oracle DB",
-    "platform": "On-Prem (Linux)"
+    "db": "SQL Server",
+    "platform": "On-Prem (Windows)"
   },
   "COMPASS": {
     "db": "Oracle DB",
@@ -5216,8 +5224,8 @@ export const SYSTEM_DEFAULTS: Record<string, { db: string; platform: string }> =
     "platform": "On-Prem (Windows)"
   },
   "MARS": {
-    "db": "SQL Server",
-    "platform": "On-Prem (Windows)"
+    "db": "Oracle DB",
+    "platform": "On-Prem (Linux)"
   },
   "WSPW": {
     "db": "SQL Server",
