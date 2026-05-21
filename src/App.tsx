@@ -884,7 +884,7 @@ export default function App() {
 
           {/* Embedded sheet editor */}
           <div className="sheet-frame">
-            <TabEditor ref={editorRef} initialData={initialData} onDirty={handleDirty} />
+            <TabEditor ref={editorRef} initialData={initialData} onDirty={handleDirty} tower={tower} cap={cap} />
           </div>
         </div>
       </div>

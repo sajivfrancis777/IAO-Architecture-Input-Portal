@@ -8,10 +8,19 @@
  *
  * Debounced (500ms), with pan/zoom controls.
  * Zoom range: 20% – 1000%. Supports fit-to-view and fullscreen.
+ *
+ * draw.io editing:
+ *   Architects can visually edit diagrams in draw.io. The edited Mermaid overrides
+ *   the auto-generated version for document generation. The .mmd file is written
+ *   back to GitHub at the correct location for ADA-Artifacts doc pipeline to pick up.
+ *   Excel remains the source of truth for data accuracy — draw.io edits only
+ *   enhance visual presentation.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { flowsToMermaid, type FlowRow, type ArchLayer } from '../utils/flowsToMermaid';
+import { DrawioEditor, useDrawioEditor, ImportDrawio } from './DrawioEditor';
+import { saveMermaidToGitHub } from '../utils/githubMermaidSave';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -33,6 +42,10 @@ mermaid.initialize({
 interface DiagramPreviewProps {
   rows: FlowRow[];
   visible: boolean;
+  /** Current tower ID (for GitHub write-back path) */
+  tower?: string;
+  /** Current capability ID (for GitHub write-back path) */
+  cap?: string;
 }
 
 const LAYERS: { key: ArchLayer; label: string; icon: string; color: string }[] = [
@@ -43,7 +56,7 @@ const LAYERS: { key: ArchLayer; label: string; icon: string; color: string }[] =
 
 let renderCount = 0;
 
-export default function DiagramPreview({ rows, visible }: DiagramPreviewProps) {
+export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPreviewProps) {
   const [layer, setLayer] = useState<ArchLayer>('application');
   const [error, setError] = useState<string | null>(null);
   const [svgHtml, setSvgHtml] = useState<string>('');
@@ -55,13 +68,27 @@ export default function DiagramPreview({ rows, visible }: DiagramPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapRef = useRef<HTMLDivElement>(null);
 
+  // ── draw.io editing state ──
+  // Per-layer edited Mermaid overrides (set when architect saves from draw.io)
+  const [editedMermaid, setEditedMermaid] = useState<Record<ArchLayer, string | null>>({
+    application: null,
+    data: null,
+    technology: null,
+  });
+  // The current effective Mermaid source (edited override OR auto-generated)
+  const [currentMermaid, setCurrentMermaid] = useState<string>('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
   // Debounced render — re-triggers on row data change OR layer switch
   useEffect(() => {
     if (!visible) return;
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const syntax = flowsToMermaid(rows, layer);
+        // Use edited Mermaid override if architect has saved one from draw.io
+        const override = editedMermaid[layer];
+        const syntax = override || flowsToMermaid(rows, layer);
+        setCurrentMermaid(syntax || '');
         if (!syntax) {
           setSvgHtml('');
           setError(null);
@@ -77,7 +104,7 @@ export default function DiagramPreview({ rows, visible }: DiagramPreviewProps) {
       }
     }, 500);
     return () => clearTimeout(debounceRef.current);
-  }, [rows, visible, layer]);
+  }, [rows, visible, layer, editedMermaid]);
 
   // Reset zoom/pan when switching layers
   useEffect(() => {
@@ -153,6 +180,49 @@ export default function DiagramPreview({ rows, visible }: DiagramPreviewProps) {
     setTranslate({ x: 0, y: 0 });
   }, [scale]);
 
+  // ── draw.io editing ──
+  const handleDrawioSave = useCallback(async (updatedMermaid: string) => {
+    // Update the edited override for this layer
+    setEditedMermaid(prev => ({ ...prev, [layer]: updatedMermaid }));
+    // Write the .mmd to GitHub for document generation to pick up
+    if (tower && cap) {
+      setSaveStatus('saving');
+      try {
+        const result = await saveMermaidToGitHub(tower, cap, layer, updatedMermaid);
+        setSaveStatus(result.ok ? 'saved' : 'error');
+        if (result.ok) setTimeout(() => setSaveStatus('idle'), 4000);
+      } catch {
+        setSaveStatus('error');
+      }
+    }
+  }, [layer, tower, cap]);
+
+  const handleImport = useCallback(async (importedMermaid: string) => {
+    setEditedMermaid(prev => ({ ...prev, [layer]: importedMermaid }));
+    if (tower && cap) {
+      setSaveStatus('saving');
+      try {
+        const result = await saveMermaidToGitHub(tower, cap, layer, importedMermaid);
+        setSaveStatus(result.ok ? 'saved' : 'error');
+        if (result.ok) setTimeout(() => setSaveStatus('idle'), 4000);
+      } catch {
+        setSaveStatus('error');
+      }
+    }
+  }, [layer, tower, cap]);
+
+  const { open: openDrawio, isOpen: isDrawioOpen, editorProps } = useDrawioEditor({
+    mermaidSource: currentMermaid,
+    tabLabel: LAYERS.find(l => l.key === layer)?.label ?? 'Diagram',
+    onSave: handleDrawioSave,
+  });
+
+  /** Clear the edited override and revert to auto-generated from Excel */
+  const clearOverride = useCallback(() => {
+    setEditedMermaid(prev => ({ ...prev, [layer]: null }));
+    setSaveStatus('idle');
+  }, [layer]);
+
   if (!visible) return null;
 
   const validRows = rows.filter(r => r['Source System'] && r['Target System']);
@@ -167,7 +237,7 @@ export default function DiagramPreview({ rows, visible }: DiagramPreviewProps) {
         zIndex: 10000, borderRadius: 0, height: '100vh',
       } : {}),
     }}>
-      {/* Layer tabs + zoom controls */}
+      {/* Layer tabs + zoom controls + draw.io actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderBottom: '1px solid #ddd', background: '#f0f4f8', fontSize: 12, flexWrap: 'wrap' }}>
         {LAYERS.map(l => (
           <button
@@ -189,7 +259,23 @@ export default function DiagramPreview({ rows, visible }: DiagramPreviewProps) {
         ))}
         <span style={{ color: '#666', marginLeft: 4 }}>
           {validRows.length} flow{validRows.length !== 1 ? 's' : ''} · {Math.round(scale * 100)}%
+          {editedMermaid[layer] && <span style={{ color: '#0071C5', fontWeight: 600, marginLeft: 6 }}>✎ edited</span>}
         </span>
+        {/* draw.io actions */}
+        <div style={{ marginLeft: 8, display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button onClick={openDrawio} style={{ ...btnStyle, background: '#4a148c', color: '#fff', borderColor: '#4a148c', fontWeight: 600 }} title="Open diagram in draw.io visual editor">
+            ✏️ Edit in draw.io
+          </button>
+          <ImportDrawio tabLabel={activeLayer.label} onImport={handleImport} />
+          {editedMermaid[layer] && (
+            <button onClick={clearOverride} style={{ ...btnStyle, background: '#fff3e0', color: '#e65100', borderColor: '#e65100', fontSize: 11 }} title="Revert to auto-generated diagram from Excel data">
+              ⟳ Revert to Excel
+            </button>
+          )}
+          {saveStatus === 'saving' && <span style={{ fontSize: 11, color: '#1565c0' }}>💾 Saving .mmd…</span>}
+          {saveStatus === 'saved' && <span style={{ fontSize: 11, color: '#2e7d32' }}>✓ Saved to GitHub</span>}
+          {saveStatus === 'error' && <span style={{ fontSize: 11, color: '#c62828' }}>⚠ Save failed</span>}
+        </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
           <button onClick={() => setScale(s => Math.min(s * 1.25, MAX_ZOOM))} style={btnStyle} title="Zoom in">+</button>
           <button onClick={() => setScale(s => Math.max(s * 0.8, MIN_ZOOM))} style={btnStyle} title="Zoom out">−</button>
@@ -240,6 +326,9 @@ export default function DiagramPreview({ rows, visible }: DiagramPreviewProps) {
           />
         )}
       </div>
+
+      {/* draw.io editor modal (fullscreen overlay) */}
+      {isDrawioOpen && editorProps && <DrawioEditor {...editorProps} />}
     </div>
   );
 }

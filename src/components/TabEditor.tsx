@@ -47,10 +47,14 @@ interface TabEditorProps {
   /** Initial data — only used on first mount. After that, use loadData(). */
   initialData: WorkbookData;
   onDirty?: () => void;
+  /** Current tower (for diagram save-back). */
+  tower?: string;
+  /** Current capability ID (for diagram save-back). */
+  cap?: string;
 }
 
 const TabEditor = forwardRef<TabEditorHandle, TabEditorProps>(
-  function TabEditor({ initialData, onDirty }, ref) {
+  function TabEditor({ initialData, onDirty, tower, cap }, ref) {
   const [activeTab, setActiveTab] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -502,7 +506,7 @@ const TabEditor = forwardRef<TabEditorHandle, TabEditorProps>(
         {/* Diagram preview pane */}
         {showPreview && isFlowsTab && (
           <div style={{ flex: `0 0 ${100 - splitPercent}%`, minWidth: 200, minHeight: 0, overflow: 'hidden' }}>
-            <DiagramPreview rows={flowRows} visible={showPreview && isFlowsTab} />
+            <DiagramPreview rows={flowRows} visible={showPreview && isFlowsTab} tower={tower} cap={cap} />
           </div>
         )}
       </div>

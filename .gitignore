@@ -18,6 +18,10 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Pyodide local runtime (downloaded via scripts/setup-pyodide-local.ps1)
+# CDN works on GitHub Pages; local only needed for Intel firewall dev
+public/pyodide/
+
 # Logs
 *.log
 npm-debug.log*

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head><title>Pyodide Test</title></head>
+<body>
+<h3>Pyodide + mermaid_converter test</h3>
+<pre id="log">Loading Pyodide...</pre>
+<script>
+const log = document.getElementById('log');
+function addLog(msg) { log.textContent += '\n' + msg; console.log(msg); }
+
+(async () => {
+  try {
+    // Load Pyodide from local
+    const script = document.createElement('script');
+    script.src = '/ADA-Ingestion/pyodide/pyodide.js';
+    document.head.appendChild(script);
+    await new Promise((res, rej) => { script.onload = res; script.onerror = rej; });
+    addLog('pyodide.js loaded');
+
+    const py = await loadPyodide({ indexURL: '/ADA-Ingestion/pyodide/' });
+    addLog('Pyodide initialized (Python ' + py.version + ')');
+
+    // Fetch converter
+    const resp = await fetch('/ADA-Ingestion/scripts/mermaid_converter.py');
+    const src = await resp.text();
+    addLog('mermaid_converter.py fetched (' + src.length + ' chars)');
+
+    // Write and import
+    py.FS.writeFile('/home/pyodide/mermaid_converter.py', src);
+    await py.runPythonAsync(`
+import sys
+sys.path.insert(0, '/home/pyodide')
+import mermaid_converter
+print("OK: imported mermaid_converter")
+`);
+    addLog('Import succeeded!');
+
+    // Test conversion
+    const result = py.runPython(`
+import json
+from mermaid_converter import parse_mermaid, export_drawio
+ir = parse_mermaid("flowchart TD\\n  A[Start] --> B[End]")
+xml = export_drawio(ir)
+json.dumps({"ok": True, "xml_len": len(xml), "nodes": len(ir.nodes)})
+`);
+    const parsed = JSON.parse(result);
+    addLog('Conversion test: ' + JSON.stringify(parsed));
+  } catch (e) {
+    addLog('ERROR: ' + e.message);
+    addLog(e.stack || '');
+  }
+})();
+</script>
+</body>
+</html>
