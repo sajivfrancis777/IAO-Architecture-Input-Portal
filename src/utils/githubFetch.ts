@@ -24,6 +24,11 @@ function apiHeaders(): Record<string, string> {
   return h;
 }
 
+/** Read-only API headers — usable without a write token (build-time token or unauthenticated). */
+export function readApiHeaders(): Record<string, string> {
+  return apiHeaders();
+}
+
 /* ── Types ─────────────────────────────────────────────────────── */
 
 interface TreeEntry {

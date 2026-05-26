@@ -11,7 +11,7 @@
  * If no draw.io edits were made, the document pipeline uses the auto-generated
  * Mermaid from Excel data (existing behavior, unchanged).
  */
-import { resolveCapabilityBasePath, invalidateTreeCache } from './githubFetch';
+import { resolveCapabilityBasePath, invalidateTreeCache, readApiHeaders } from './githubFetch';
 import { getWriteToken } from './githubSave';
 import type { ArchLayer } from './flowsToMermaid';
 
@@ -223,32 +223,35 @@ export async function saveDrawioXmlToGitHub(
 /**
  * Fetch saved draw.io XML from GitHub for a given tower/cap/layer.
  * Returns null if no saved layout exists (404).
+ *
+ * Uses the read-only API headers (build-time token or unauthenticated) so it
+ * works across browsers without requiring a write token in localStorage.
  */
 export async function fetchDrawioXmlFromGitHub(
   tower: string,
   capId: string,
   layer: ArchLayer,
 ): Promise<string | null> {
-  const token = getWriteToken();
-  if (!token) return null;
-
   const basePath = await resolveCapabilityBasePath(tower, capId);
   if (!basePath) return null;
 
   const filename = drawioFilename(layer);
   const path = `${basePath}${filename}`;
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github.v3+json',
-  };
+  // Use read-only headers — works without localStorage write token
+  const headers = readApiHeaders();
 
   try {
     const res = await fetch(`${API}/${path}?ref=main`, { headers });
     if (!res.ok) return null;
     const data = await res.json();
-    // GitHub returns base64-encoded content
-    return atob(data.content.replace(/\n/g, ''));
+    // GitHub returns base64-encoded content — decode as UTF-8 (atob alone corrupts multi-byte chars)
+    const binary = atob(data.content.replace(/\n/g, ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
   } catch {
     return null;
   }
