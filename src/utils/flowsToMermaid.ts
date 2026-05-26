@@ -123,7 +123,7 @@ function classifyDb(label: string): string {
 
 // ── Mermaid init header (matches Python) ──
 
-const MERMAID_INIT = '%%{init: {"theme": "base", "securityLevel": "loose", ' +
+const MERMAID_INIT = '%%{init: {"theme": "base", ' +
   '"themeVariables": {"fontSize": "18px", "fontFamily": "Segoe UI, Arial, sans-serif"}, ' +
   '"flowchart": {"useMaxWidth": true, "htmlLabels": true, "nodeSpacing": 50, "rankSpacing": 60}} }%%';
 

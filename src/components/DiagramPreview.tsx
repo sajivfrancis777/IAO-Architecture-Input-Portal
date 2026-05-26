@@ -20,7 +20,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { flowsToMermaid, type FlowRow, type ArchLayer } from '../utils/flowsToMermaid';
 import { DrawioEditor, useDrawioEditor, ImportDrawio } from './DrawioEditor';
-import { saveMermaidToGitHub } from '../utils/githubMermaidSave';
+import { saveMermaidToGitHub, saveDrawioXmlToGitHub, fetchDrawioXmlFromGitHub } from '../utils/githubMermaidSave';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -31,13 +31,6 @@ mermaid.initialize({
 
 const MAX_ZOOM = 10;
 const MIN_ZOOM = 0.2;
-
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'loose',
-  theme: 'base',
-  fontFamily: 'Segoe UI, Arial, sans-serif',
-});
 
 interface DiagramPreviewProps {
   rows: FlowRow[];
@@ -75,9 +68,33 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
     data: null,
     technology: null,
   });
+  // Per-layer saved draw.io XML (preserves layout across sessions)
+  const [savedDrawioXml, setSavedDrawioXml] = useState<Record<ArchLayer, string | null>>({
+    application: null,
+    data: null,
+    technology: null,
+  });
   // The current effective Mermaid source (edited override OR auto-generated)
   const [currentMermaid, setCurrentMermaid] = useState<string>('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // ── Fetch saved draw.io XML from GitHub on mount / capability change ──
+  useEffect(() => {
+    if (!tower || !cap) return;
+    let cancelled = false;
+
+    (async () => {
+      const layers: ArchLayer[] = ['application', 'data', 'technology'];
+      const results: Record<ArchLayer, string | null> = { application: null, data: null, technology: null };
+      await Promise.all(layers.map(async (l) => {
+        const xml = await fetchDrawioXmlFromGitHub(tower, cap, l);
+        if (!cancelled && xml) results[l] = xml;
+      }));
+      if (!cancelled) setSavedDrawioXml(results);
+    })();
+
+    return () => { cancelled = true; };
+  }, [tower, cap]);
 
   // Debounced render — re-triggers on row data change OR layer switch
   useEffect(() => {
@@ -181,16 +198,21 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
   }, [scale]);
 
   // ── draw.io editing ──
-  const handleDrawioSave = useCallback(async (updatedMermaid: string) => {
+  const handleDrawioSave = useCallback(async (updatedMermaid: string, drawioXml: string) => {
     // Update the edited override for this layer
     setEditedMermaid(prev => ({ ...prev, [layer]: updatedMermaid }));
-    // Write the .mmd to GitHub for document generation to pick up
+    // Cache the draw.io XML locally so next open doesn't need to re-fetch
+    setSavedDrawioXml(prev => ({ ...prev, [layer]: drawioXml }));
+    // Write both .mmd and .drawio to GitHub
     if (tower && cap) {
       setSaveStatus('saving');
       try {
-        const result = await saveMermaidToGitHub(tower, cap, layer, updatedMermaid);
-        setSaveStatus(result.ok ? 'saved' : 'error');
-        if (result.ok) setTimeout(() => setSaveStatus('idle'), 4000);
+        const [mmdResult] = await Promise.all([
+          saveMermaidToGitHub(tower, cap, layer, updatedMermaid),
+          saveDrawioXmlToGitHub(tower, cap, layer, drawioXml),
+        ]);
+        setSaveStatus(mmdResult.ok ? 'saved' : 'error');
+        if (mmdResult.ok) setTimeout(() => setSaveStatus('idle'), 4000);
       } catch {
         setSaveStatus('error');
       }
@@ -213,6 +235,7 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
 
   const { open: openDrawio, isOpen: isDrawioOpen, editorProps } = useDrawioEditor({
     mermaidSource: currentMermaid,
+    savedDrawioXml: savedDrawioXml[layer] ?? undefined,
     tabLabel: LAYERS.find(l => l.key === layer)?.label ?? 'Diagram',
     onSave: handleDrawioSave,
   });
@@ -220,6 +243,7 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
   /** Clear the edited override and revert to auto-generated from Excel */
   const clearOverride = useCallback(() => {
     setEditedMermaid(prev => ({ ...prev, [layer]: null }));
+    setSavedDrawioXml(prev => ({ ...prev, [layer]: null }));
     setSaveStatus('idle');
   }, [layer]);
 

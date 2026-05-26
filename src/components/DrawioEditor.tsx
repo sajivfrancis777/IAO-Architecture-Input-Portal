@@ -28,10 +28,12 @@ import {
 interface DrawioEditorProps {
   /** Current Mermaid source for this tab */
   mermaidSource: string;
+  /** Pre-saved draw.io XML (if exists). When provided, loads directly — skips Mermaid→Pyodide. */
+  savedDrawioXml?: string;
   /** Tab label shown in the editor header */
   tabLabel?: string;
-  /** Called with updated Mermaid text after architect saves */
-  onSave: (updatedMermaid: string) => void;
+  /** Called with updated Mermaid text and raw draw.io XML after architect saves */
+  onSave: (updatedMermaid: string, drawioXml: string) => void;
   /** Called when editor is dismissed without saving */
   onClose: () => void;
   /** draw.io embed URL */
@@ -59,6 +61,7 @@ interface DrawioMessage {
 
 export function DrawioEditor({
   mermaidSource,
+  savedDrawioXml,
   tabLabel = 'Diagram',
   onSave,
   onClose,
@@ -80,7 +83,11 @@ export function DrawioEditor({
     (async () => {
       try {
         let xml: string;
-        if (!mermaidSource.trim()) {
+        if (savedDrawioXml) {
+          // Use the persisted draw.io XML directly (preserves architect's layout edits)
+          xml = savedDrawioXml;
+          console.log('[DrawioEditor] Using saved draw.io XML, length:', xml.length);
+        } else if (!mermaidSource.trim()) {
           // No mermaid source — give draw.io an empty canvas (architect draws from scratch)
           xml = buildEmptyDrawio();
           console.log('[DrawioEditor] Empty source → using blank canvas');
@@ -117,7 +124,7 @@ export function DrawioEditor({
     }, 15000);
 
     return () => { cancelled = true; clearTimeout(timeout); };
-  }, [mermaidSource]);
+  }, [mermaidSource, savedDrawioXml]);
 
   // ── Refs for stable message handler (avoids listener re-registration) ────
   const drawioXmlRef = useRef(drawioXml);
@@ -183,7 +190,7 @@ export function DrawioEditor({
           setIsDirty(false);
           try {
             const result = await drawioToMermaid(msg.xml);
-            onSaveRef.current(result.content);
+            onSaveRef.current(result.content, msg.xml);
             // ACK the save to draw.io so it knows we processed it
             iframe.contentWindow.postMessage(
               JSON.stringify({ action: 'status', message: 'Saved', modified: false }),
@@ -330,26 +337,27 @@ function StatusBadge({ status }: { status: string }) {
 
 interface UseDrawioEditorOptions {
   mermaidSource: string;
+  savedDrawioXml?: string;
   tabLabel: string;
-  onSave: (mmd: string) => void;
+  onSave: (mmd: string, drawioXml: string) => void;
 }
 
-export function useDrawioEditor({ mermaidSource, tabLabel, onSave }: UseDrawioEditorOptions) {
+export function useDrawioEditor({ mermaidSource, savedDrawioXml, tabLabel, onSave }: UseDrawioEditorOptions) {
   const [isOpen, setIsOpen] = useState(false);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
 
   const handleSave = useCallback(
-    (mmd: string) => {
-      onSave(mmd);
+    (mmd: string, drawioXml: string) => {
+      onSave(mmd, drawioXml);
       setIsOpen(false);
     },
     [onSave]
   );
 
   const editorProps: DrawioEditorProps | null = isOpen
-    ? { mermaidSource, tabLabel, onSave: handleSave, onClose: close }
+    ? { mermaidSource, savedDrawioXml, tabLabel, onSave: handleSave, onClose: close }
     : null;
 
   return { open, close, isOpen, editorProps };

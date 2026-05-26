@@ -39,6 +39,19 @@ function layerFilename(layer: ArchLayer): string {
 }
 
 /**
+ * Build the .drawio filename for a given architecture layer.
+ * Convention: ApplicationDiagram.drawio, DataDiagram.drawio, TechnologyDiagram.drawio
+ */
+function drawioFilename(layer: ArchLayer): string {
+  const names: Record<ArchLayer, string> = {
+    application: 'ApplicationDiagram.drawio',
+    data: 'DataDiagram.drawio',
+    technology: 'TechnologyDiagram.drawio',
+  };
+  return names[layer];
+}
+
+/**
  * Save edited Mermaid source to the ADA-Artifacts repo via GitHub Contents API.
  *
  * Creates or updates the .mmd file at the canonical path. The document generation
@@ -128,5 +141,115 @@ export async function saveMermaidToGitHub(
     return { ok: false, message: `GitHub API error: ${putRes.status}` };
   } catch (e) {
     return { ok: false, message: `Network error: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+}
+
+/**
+ * Save draw.io XML (with full layout) to GitHub alongside the .mmd file.
+ * This preserves architect's visual edits (positions, routing, sizes) across sessions.
+ */
+export async function saveDrawioXmlToGitHub(
+  tower: string,
+  capId: string,
+  layer: ArchLayer,
+  drawioXml: string,
+): Promise<MermaidSaveResult> {
+  const token = getWriteToken();
+  if (!token) {
+    return { ok: false, message: 'No GitHub write token configured.' };
+  }
+
+  const basePath = await resolveCapabilityBasePath(tower, capId);
+  if (!basePath) {
+    return { ok: false, message: `Cannot resolve repo path for ${tower}/${capId}.` };
+  }
+
+  const filename = drawioFilename(layer);
+  const path = `${basePath}${filename}`;
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+  };
+
+  let existingSha: string | undefined;
+  try {
+    const getRes = await fetch(`${API}/${path}?ref=main`, { headers });
+    if (getRes.ok) {
+      const existing = await getRes.json();
+      existingSha = existing.sha;
+    } else if (getRes.status !== 404) {
+      return { ok: false, message: `GitHub API error: ${getRes.status}` };
+    }
+  } catch (e) {
+    return { ok: false, message: `Network error: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(drawioXml);
+  const content = btoa(String.fromCharCode(...bytes));
+
+  const body: Record<string, unknown> = {
+    message: `Update ${layer} diagram layout for ${tower}/${capId} (draw.io)`,
+    content,
+    branch: 'main',
+  };
+  if (existingSha) body.sha = existingSha;
+
+  try {
+    const putRes = await fetch(`${API}/${path}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (putRes.ok || putRes.status === 201) {
+      const result = await putRes.json();
+      invalidateTreeCache();
+      return {
+        ok: true,
+        message: existingSha ? 'Updated .drawio on GitHub' : 'Created .drawio on GitHub',
+        commitSha: result.commit?.sha,
+      };
+    }
+
+    return { ok: false, message: `GitHub API error: ${putRes.status}` };
+  } catch (e) {
+    return { ok: false, message: `Network error: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+}
+
+/**
+ * Fetch saved draw.io XML from GitHub for a given tower/cap/layer.
+ * Returns null if no saved layout exists (404).
+ */
+export async function fetchDrawioXmlFromGitHub(
+  tower: string,
+  capId: string,
+  layer: ArchLayer,
+): Promise<string | null> {
+  const token = getWriteToken();
+  if (!token) return null;
+
+  const basePath = await resolveCapabilityBasePath(tower, capId);
+  if (!basePath) return null;
+
+  const filename = drawioFilename(layer);
+  const path = `${basePath}${filename}`;
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github.v3+json',
+  };
+
+  try {
+    const res = await fetch(`${API}/${path}?ref=main`, { headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    // GitHub returns base64-encoded content
+    return atob(data.content.replace(/\n/g, ''));
+  } catch {
+    return null;
   }
 }
