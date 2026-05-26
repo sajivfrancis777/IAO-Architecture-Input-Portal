@@ -16,7 +16,7 @@
  *   Excel remains the source of truth for data accuracy — draw.io edits only
  *   enhance visual presentation.
  */
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import mermaid from 'mermaid';
 import { flowsToMermaid, type FlowRow, type ArchLayer } from '../utils/flowsToMermaid';
 import { DrawioEditor, useDrawioEditor, ImportDrawio } from './DrawioEditor';
@@ -41,6 +41,12 @@ interface DiagramPreviewProps {
   cap?: string;
 }
 
+/** Imperative handle exposed to parent for toolbar-triggered diagram saves */
+export interface DiagramPreviewHandle {
+  /** Save any in-memory draw.io XML to GitHub. Called by toolbar "Push to GitHub". */
+  saveDrawioToGitHub: () => Promise<{ ok: boolean; message: string }>;
+}
+
 const LAYERS: { key: ArchLayer; label: string; icon: string; color: string }[] = [
   { key: 'application', label: 'Application', icon: '◈', color: '#0071C5' },
   { key: 'data',        label: 'Data',        icon: '◆', color: '#1565C0' },
@@ -49,7 +55,7 @@ const LAYERS: { key: ArchLayer; label: string; icon: string; color: string }[] =
 
 let renderCount = 0;
 
-export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPreviewProps) {
+const DiagramPreview = forwardRef<DiagramPreviewHandle, DiagramPreviewProps>(function DiagramPreview({ rows, visible, tower, cap }, ref) {
   const [layer, setLayer] = useState<ArchLayer>('application');
   const [error, setError] = useState<string | null>(null);
   const [svgHtml, setSvgHtml] = useState<string>('');
@@ -77,6 +83,27 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
   // The current effective Mermaid source (edited override OR auto-generated)
   const [currentMermaid, setCurrentMermaid] = useState<string>('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // ── Imperative handle: allow parent/toolbar to trigger draw.io save ──
+  useImperativeHandle(ref, () => ({
+    saveDrawioToGitHub: async () => {
+      if (!tower || !cap) return { ok: true, message: 'No tower/cap context — nothing to save.' };
+      const layers: ArchLayer[] = ['application', 'data', 'technology'];
+      const toSave = layers.filter(l => savedDrawioXml[l]);
+      if (toSave.length === 0) return { ok: true, message: 'No draw.io diagrams to save.' };
+
+      const results = await Promise.all(
+        toSave.map(l => saveDrawioXmlToGitHub(tower, cap, l, savedDrawioXml[l]!))
+      );
+      const allOk = results.every(r => r.ok);
+      return {
+        ok: allOk,
+        message: allOk
+          ? `Saved ${toSave.length} draw.io diagram(s) to GitHub.`
+          : 'Some diagram saves failed.',
+      };
+    },
+  }), [tower, cap, savedDrawioXml]);
 
   // ── Fetch saved draw.io XML from GitHub on mount / capability change ──
   useEffect(() => {
@@ -199,20 +226,26 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
 
   // ── draw.io editing ──
   const handleDrawioSave = useCallback(async (updatedMermaid: string, drawioXml: string) => {
-    // Update the edited override for this layer
-    setEditedMermaid(prev => ({ ...prev, [layer]: updatedMermaid }));
+    // Update the edited override for this layer (may be empty if Pyodide failed — that's OK)
+    if (updatedMermaid) {
+      setEditedMermaid(prev => ({ ...prev, [layer]: updatedMermaid }));
+    }
     // Cache the draw.io XML locally so next open doesn't need to re-fetch
     setSavedDrawioXml(prev => ({ ...prev, [layer]: drawioXml }));
-    // Write both .mmd and .drawio to GitHub
+    // Write .drawio to GitHub unconditionally; .mmd only if Mermaid conversion succeeded
     if (tower && cap) {
       setSaveStatus('saving');
       try {
-        const [mmdResult] = await Promise.all([
-          saveMermaidToGitHub(tower, cap, layer, updatedMermaid),
+        const promises: Promise<unknown>[] = [
           saveDrawioXmlToGitHub(tower, cap, layer, drawioXml),
-        ]);
-        setSaveStatus(mmdResult.ok ? 'saved' : 'error');
-        if (mmdResult.ok) setTimeout(() => setSaveStatus('idle'), 4000);
+        ];
+        if (updatedMermaid) {
+          promises.push(saveMermaidToGitHub(tower, cap, layer, updatedMermaid));
+        }
+        const results = await Promise.all(promises);
+        const xmlResult = results[0] as { ok: boolean };
+        setSaveStatus(xmlResult.ok ? 'saved' : 'error');
+        if (xmlResult.ok) setTimeout(() => setSaveStatus('idle'), 4000);
       } catch {
         setSaveStatus('error');
       }
@@ -296,9 +329,9 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
               ⟳ Revert to Excel
             </button>
           )}
-          {saveStatus === 'saving' && <span style={{ fontSize: 11, color: '#1565c0' }}>💾 Saving .mmd…</span>}
-          {saveStatus === 'saved' && <span style={{ fontSize: 11, color: '#2e7d32' }}>✓ Saved to GitHub</span>}
-          {saveStatus === 'error' && <span style={{ fontSize: 11, color: '#c62828' }}>⚠ Save failed</span>}
+          {saveStatus === 'saving' && <span style={{ fontSize: 11, color: '#1565c0' }}>💾 Saving diagram to GitHub…</span>}
+          {saveStatus === 'saved' && <span style={{ fontSize: 11, color: '#2e7d32' }}>✓ Diagram saved to GitHub</span>}
+          {saveStatus === 'error' && <span style={{ fontSize: 11, color: '#c62828' }}>⚠ Diagram save failed</span>}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
           <button onClick={() => setScale(s => Math.min(s * 1.25, MAX_ZOOM))} style={btnStyle} title="Zoom in">+</button>
@@ -355,7 +388,9 @@ export default function DiagramPreview({ rows, visible, tower, cap }: DiagramPre
       {isDrawioOpen && editorProps && <DrawioEditor {...editorProps} />}
     </div>
   );
-}
+});
+
+export default DiagramPreview;
 
 const btnStyle: React.CSSProperties = {
   padding: '2px 8px',

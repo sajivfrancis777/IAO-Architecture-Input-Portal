@@ -14,6 +14,7 @@ import type { WorkbookData } from '../utils/xlsxUtils';
 import { enrichFlowPlatforms } from '../utils/platformLookup';
 import type { ColDef, ColGroupDef, CellValueChangedEvent, GridReadyEvent } from 'ag-grid-community';
 import DiagramPreview from './DiagramPreview';
+import type { DiagramPreviewHandle } from './DiagramPreview';
 import type { FlowRow } from '../utils/flowsToMermaid';
 
 /** Custom Excel-like theme: compact rows, visible borders */
@@ -41,6 +42,8 @@ export interface TabEditorHandle {
   flush: () => WorkbookData;
   /** Push new external data into the grid (upload, fetch, tower/cap change). */
   loadData: (newData: WorkbookData) => void;
+  /** Save any in-memory draw.io diagrams to GitHub (called by toolbar Push to GitHub). */
+  saveDrawioToGitHub: () => Promise<{ ok: boolean; message: string }>;
 }
 
 interface TabEditorProps {
@@ -70,6 +73,7 @@ const TabEditor = forwardRef<TabEditorHandle, TabEditorProps>(
   const [splitPercent, setSplitPercent] = useState(55); // grid gets this %, diagram gets rest
   const splitDragRef = useRef<{ dragging: boolean; startX: number; startPct: number; containerW: number }>({ dragging: false, startX: 0, startPct: 55, containerW: 0 });
   const splitContainerRef = useRef<HTMLDivElement>(null);
+  const diagramRef = useRef<DiagramPreviewHandle>(null);
 
   // ── Stable ref for onDirty ─────────────────────────────────
   const onDirtyRef = useRef(onDirty);
@@ -156,6 +160,10 @@ const TabEditor = forwardRef<TabEditorHandle, TabEditorProps>(
       }
       // Always sync diagram preview with new Flows data
       setFlowRows((newData['Flows'] ?? []) as FlowRow[]);
+    },
+    saveDrawioToGitHub: async () => {
+      if (!diagramRef.current) return { ok: true, message: 'No diagram preview active.' };
+      return diagramRef.current.saveDrawioToGitHub();
     },
   }), [saveCurrentTabToCache, pushTabToGrid, activeTab]);
 
@@ -506,7 +514,7 @@ const TabEditor = forwardRef<TabEditorHandle, TabEditorProps>(
         {/* Diagram preview pane */}
         {showPreview && isFlowsTab && (
           <div style={{ flex: `0 0 ${100 - splitPercent}%`, minWidth: 200, minHeight: 0, overflow: 'hidden' }}>
-            <DiagramPreview rows={flowRows} visible={showPreview && isFlowsTab} tower={tower} cap={cap} />
+            <DiagramPreview ref={diagramRef} rows={flowRows} visible={showPreview && isFlowsTab} tower={tower} cap={cap} />
           </div>
         )}
       </div>

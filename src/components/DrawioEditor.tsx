@@ -75,7 +75,13 @@ export function DrawioEditor({
   const initReceivedRef = useRef(false);
 
   // ── Step 1: Convert Mermaid → draw.io XML on mount (via Pyodide) ─────────
+  // Track whether we've already loaded XML to avoid re-triggering on parent re-renders
+  const hasLoadedRef = useRef(false);
+
   useEffect(() => {
+    // Once loaded successfully, don't re-run on prop changes (the editor is already open)
+    if (hasLoadedRef.current) return;
+
     let cancelled = false;
     setStatus('loading');
     initReceivedRef.current = false;
@@ -99,6 +105,7 @@ export function DrawioEditor({
         }
         if (!cancelled) {
           setDrawioXml(xml);
+          hasLoadedRef.current = true;
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -188,19 +195,27 @@ export function DrawioEditor({
           if (!msg.xml) break;
           setStatus('saving');
           setIsDirty(false);
+
+          // Save the raw XML immediately — Pyodide Mermaid conversion is best-effort only.
+          // The XML IS the primary persistence artifact; Mermaid is secondary for the preview.
+          let mermaidResult = '';
           try {
             const result = await drawioToMermaid(msg.xml);
-            onSaveRef.current(result.content, msg.xml);
-            // ACK the save to draw.io so it knows we processed it
-            iframe.contentWindow.postMessage(
-              JSON.stringify({ action: 'status', message: 'Saved', modified: false }),
-              '*'
-            );
-            setStatus('ready');
+            mermaidResult = result.content || '';
           } catch (err: unknown) {
-            setErrorMsg(err instanceof Error ? err.message : String(err));
-            setStatus('error');
+            // Pyodide conversion failed — NOT fatal. XML is still saved.
+            console.warn('[DrawioEditor] Pyodide XML→Mermaid conversion failed (non-fatal):', err);
           }
+
+          // Always fire onSave with the raw XML (mermaid may be empty string if conversion failed)
+          onSaveRef.current(mermaidResult, msg.xml);
+
+          // ACK the save to draw.io so it knows we processed it
+          iframe.contentWindow.postMessage(
+            JSON.stringify({ action: 'status', message: 'Saved', modified: false }),
+            '*'
+          );
+          setStatus('ready');
           break;
         }
 

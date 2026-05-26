@@ -308,6 +308,13 @@ export default function App() {
     setGithubStatus('pushing');
     setGithubMessage('');
     const result = await saveToGitHub(tower, cap, release, state, currentData, sourceRepoPath);
+    // Also save any draw.io diagrams to GitHub alongside the Excel data
+    if (editorRef.current) {
+      const diagramResult = await editorRef.current.saveDrawioToGitHub();
+      if (!diagramResult.ok) {
+        console.warn('[ADA] Diagram save failed:', diagramResult.message);
+      }
+    }
     if (result.ok) {
       setGithubStatus('pushed');
       setGithubMessage(result.message);
