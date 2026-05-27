@@ -101,8 +101,8 @@ const flowsColumns: (ColDef | ColGroupDef)[] = [
     headerName: 'Flow Identification',
     marryChildren: true,
     children: [
-      { field: 'Flow Chain', width: 200 },
-      { field: 'Hop #', width: 80, ...numericCol() },
+      { field: 'Flow Chain', width: 200, cellDataType: 'text' },
+      { field: 'Hop #', width: 80, cellDataType: 'number', ...numericCol() },
     ],
   },
   {
