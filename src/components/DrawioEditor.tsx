@@ -43,7 +43,7 @@ interface DrawioEditorProps {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_DRAWIO_URL =
-  'https://embed.diagrams.net/?embed=1&proto=json&spin=1&libraries=1&saveAndExit=1&noSaveBtn=0&noExitBtn=0';
+  'https://embed.diagrams.net/?embed=1&proto=json&spin=1&libs=general;uml;flowchart&saveAndExit=1&noSaveBtn=0&noExitBtn=0';
 
 function buildEmptyDrawio(): string {
   return '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
