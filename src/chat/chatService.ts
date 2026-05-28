@@ -438,6 +438,124 @@ async function loadContextIndex(): Promise<ContextIndex | null> {
   return contextIndex;
 }
 
+// ── Document Summary Index (deep metric grounding) ──────────────
+// Pre-extracted metrics from generated docs (RICEFW counts, pass rates, etc.)
+interface DocSummaryTower {
+  ricefw?: Record<string, string | null>;
+  testing?: Record<string, string | number | null | Record<string, number> | Array<Record<string, string>>>;
+  openRaids?: number;
+  activeCRs?: number;
+  capabilities?: Record<string, Record<string, unknown>>;
+}
+interface DocSummaryIndex {
+  programSummary: {
+    totalTowers: number; totalCapabilities: number; totalDocumentsIndexed: number;
+    totalDevObjects: number; totalCompleted: number; totalActive: number;
+    completionPct: number; totalOpenRaids: number; totalActiveCRs: number;
+  };
+  towers: Record<string, DocSummaryTower>;
+}
+
+let docSummaryIndex: DocSummaryIndex | null = null;
+let docSummaryLoading = false;
+
+async function loadDocSummaryIndex(): Promise<DocSummaryIndex | null> {
+  if (docSummaryIndex || docSummaryLoading) return docSummaryIndex;
+  docSummaryLoading = true;
+  try {
+    const r = await fetch(CONTEXT_INDEX_BASE + 'doc-summary-index.json');
+    if (r.ok) {
+      docSummaryIndex = await r.json();
+      console.log('[ADA Chat] Loaded doc-summary-index:', docSummaryIndex?.programSummary?.totalCapabilities, 'caps,', docSummaryIndex?.programSummary?.totalDocumentsIndexed, 'docs');
+    }
+  } catch (e) {
+    console.warn('[ADA Chat] Could not load doc-summary-index.json:', e);
+  }
+  docSummaryLoading = false;
+  return docSummaryIndex;
+}
+
+/** Build grounding context from doc-summary-index for detected towers/capabilities. */
+function getDocSummaryContext(text: string): string {
+  if (!docSummaryIndex) return '';
+  const parts: string[] = [];
+  const lower = text.toLowerCase();
+
+  // Detect tower(s) in user query
+  const towerRe = /\b(FPR|OTC-IF|OTC-IP|FTS-IF|FTS-IP|PTP|MDM|E2E)\b/gi;
+  const towerMatches = [...new Set((text.match(towerRe) || []).map(t => t.toUpperCase()))];
+
+  // Detect cap IDs
+  const capIdRe = /\b([A-Z]{1,4}-(?:IF-|IP-)?[A-Z]{0,3}-?\d{2,3})\b/gi;
+  const capIds = [...new Set((text.match(capIdRe) || []).map(m => m.toUpperCase()))];
+
+  // Program-level summary if asking broadly
+  if (/program|overall|all.*tower|dashboard|health|summary/i.test(lower) && towerMatches.length === 0 && capIds.length === 0) {
+    const ps = docSummaryIndex.programSummary;
+    let section = '### Program Metrics (from generated documents)\n';
+    section += `- **Towers:** ${ps.totalTowers} | **Capabilities:** ${ps.totalCapabilities}\n`;
+    section += `- **Total Dev Objects:** ${ps.totalDevObjects} | **Completed:** ${ps.totalCompleted} (${ps.completionPct}%)\n`;
+    section += `- **Open RAIDs:** ${ps.totalOpenRaids} | **Active CRs:** ${ps.totalActiveCRs}\n\n`;
+    section += '| Tower | Objects | Completion | Pass Rate | Open RAIDs | Open Defects |\n';
+    section += '|-------|---------|------------|-----------|------------|-------------|\n';
+    for (const [tw, data] of Object.entries(docSummaryIndex.towers || {})) {
+      const rw = data.ricefw || {};
+      const ts = data.testing || {} as Record<string, unknown>;
+      section += `| ${tw} | ${rw.totalObjects || '—'} | ${rw.avgBuildCompletion || '—'} | ${(ts as Record<string, unknown>).passRate || '—'} | ${data.openRaids || '—'} | ${(ts as Record<string, unknown>).openDefects || '—'} |\n`;
+    }
+    parts.push(section);
+  }
+
+  // Tower-level detail
+  for (const tw of towerMatches) {
+    const tData = (docSummaryIndex.towers || {})[tw];
+    if (!tData) continue;
+    let section = `### ${tw} Tower Metrics\n`;
+    if (tData.ricefw) {
+      const r = tData.ricefw;
+      section += `**RICEFW:** ${r.totalObjects} objects (S4: ${r.s4Objects}, ECA: ${r.ecaObjects}) | Active: ${r.activeCount} | Completed: ${r.completedCount} | Rejected: ${r.rejectedCount}\n`;
+      section += `**Completion:** FS ${r.avgFsCompletion}, Build ${r.avgBuildCompletion}, FUT ${r.avgFutCompletion}\n`;
+      if (r.s4Breakdown) section += `**S4 Breakdown:** ${r.s4Breakdown}\n`;
+    }
+    if (tData.testing) {
+      const t = tData.testing as Record<string, unknown>;
+      section += `**Testing:** Pass Rate ${t.passRate} | Open Defects: ${t.openDefects} (Critical: ${t.criticalDefects})\n`;
+      if (t.testsPassed != null) section += `**Execution:** Passed: ${t.testsPassed}, Failed: ${t.testsFailed}, Blocked: ${t.testsBlocked}, Not Run: ${t.testsNotRun}\n`;
+    }
+    if (tData.openRaids) section += `**Open RAIDs:** ${tData.openRaids}\n`;
+    if (tData.activeCRs) section += `**Active CRs:** ${tData.activeCRs}\n`;
+    parts.push(section);
+  }
+
+  // Capability-level detail
+  for (const cid of capIds.slice(0, 5)) {
+    for (const [tw, tData] of Object.entries(docSummaryIndex.towers || {})) {
+      const capData = (tData.capabilities || {})[cid] as Record<string, Record<string, unknown>> | undefined;
+      if (!capData) continue;
+      let section = `### ${cid} Document Metrics (${tw})\n`;
+      if (capData.ricefw) {
+        const r = capData.ricefw;
+        section += `**RICEFW:** ${r.totalObjects} objects (S4: ${r.s4Objects}, ECA: ${r.ecaObjects}) | Active: ${r.activeCount} | Completed: ${r.completedCount}\n`;
+        section += `**Completion:** FS ${r.avgFsCompletion}, Build ${r.avgBuildCompletion}, FUT ${r.avgFutCompletion}\n`;
+      }
+      if (capData.testing) {
+        const t = capData.testing;
+        section += `**Testing:** Pass Rate ${t.passRate} | Open Defects: ${t.openDefects} (Critical: ${t.criticalDefects})\n`;
+      }
+      if (capData.architecture) {
+        const a = capData.architecture;
+        section += `**Architecture:** ${a.diagramCount} diagrams, ${a.systemCount} systems\n`;
+      }
+      parts.push(section);
+      break;
+    }
+  }
+
+  const result = parts.join('\n\n');
+  if (result.length > 8000) return result.slice(0, 8000) + '\n…(metrics truncated)';
+  return result;
+}
+
 /** Extract known system names from user text (including IAPM aliases) */
 function detectSystemNames(text: string): string[] {
   if (!contextIndex) return [];
@@ -1003,8 +1121,8 @@ export async function sendMessage(
     };
   }
 
-  // Load cross-repo context index (from ADA-Artifacts GitHub Pages)
-  await loadContextIndex();
+  // Load cross-repo context index and doc summary (from ADA-Artifacts GitHub Pages)
+  await Promise.all([loadContextIndex(), loadDocSummaryIndex()]);
 
   // Extract user's latest message text for context search
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
@@ -1029,6 +1147,9 @@ export async function sendMessage(
   // Search context index for cross-capability grounding
   const crossCapContext = searchContextIndex(userText);
 
+  // Document metrics grounding: pre-extracted numbers from generated docs
+  const docMetricsContext = getDocSummaryContext(userText);
+
   // Build system prompt with all grounding sources
   let systemPrompt = SYSTEM_PROMPT;
   if (gridContext) {
@@ -1042,6 +1163,9 @@ export async function sendMessage(
   }
   if (crossCapContext) {
     systemPrompt += `\n\n## Cross-Capability Context (from architecture knowledge base)\nThe following data spans ALL towers and capabilities in the program. This is the AUTHORITATIVE source — prefer it over grid data when the grid appears empty or contains placeholders.\n\n${crossCapContext}`;
+  }
+  if (docMetricsContext) {
+    systemPrompt += `\n\n## Document Metrics (pre-extracted from generated reports)\nUse these exact numbers when answering quantitative questions about RICEFW counts, pass rates, completion %, RAIDs, or CRs.\n\n${docMetricsContext}`;
   }
 
   // Send only last 6 messages to reduce token cost
