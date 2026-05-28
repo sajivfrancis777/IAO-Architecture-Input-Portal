@@ -272,6 +272,41 @@ export default function ChatPanel({ open, onClose, gridContext, flowRows }: Chat
   const sendPromptRef = useRef(sendPromptDirect);
   sendPromptRef.current = sendPromptDirect;
 
+  // ── Export handlers ────────────────────────────────────────
+  const extractTitle = (md: string) => {
+    const match = md.match(/^#\s+(.+)$/m);
+    return match ? match[1].trim() : 'Architecture Response';
+  };
+  const safeName = (title: string) => title.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_').slice(0, 50) || 'document';
+
+  const handleCopyMd = (md: string) => {
+    navigator.clipboard.writeText(md);
+  };
+
+  const handleDownloadHtml = (md: string) => {
+    const title = extractTitle(md);
+    const htmlBody = renderMarkdown(md);
+    const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const css = 'body{font-family:"Segoe UI",Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;color:#1a1a1a;max-width:210mm;margin:0 auto;padding:15mm;background:#fff}h1{font-size:22pt;color:#00285a;border-bottom:3px solid #0071c5;padding-bottom:8px;margin-top:30px}h2{font-size:16pt;color:#00285a;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:24px}h3{font-size:13pt;color:#0071c5;margin-top:18px}table{border-collapse:collapse;width:100%;margin:12px 0;font-size:9.5pt}th{background:#00285a;color:#fff;font-weight:600;text-align:left;padding:4px 6px;border:1px solid #00285a}td{padding:4px 6px;border:1px solid #ddd}tr:nth-child(even) td{background:#f5f8fc}code{font-family:"Cascadia Code",Consolas,monospace;font-size:9pt;background:#f0f0f0;padding:1px 4px;border-radius:3px}pre{background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:4px;overflow-x:auto;font-size:8.5pt}blockquote{border-left:4px solid #0071c5;background:#f5f8fc;margin:12px 0;padding:8px 16px;color:#333}.header-bar{background:#00285a;color:#fff;padding:16px 24px;margin:-15mm -15mm 20px -15mm}.header-bar h1{color:#fff;border:none;margin:0;padding:0;font-size:20pt}.header-bar .subtitle{color:#a8c7e8;font-size:10pt}.footer{font-size:8pt;color:#888;text-align:center;margin-top:30px;padding-top:10px;border-top:1px solid #ddd}';
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${title}</title><style>${css}</style></head><body><div class="header-bar"><h1>${title}</h1><div class="subtitle">IAO Architecture — Generated ${timestamp}</div></div>${htmlBody}<div class="footer">IAO Architecture · Intel IDM 2.0 · Generated ${timestamp}</div></body></html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = safeName(title) + '.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handleDownloadMd = (md: string) => {
+    const title = extractTitle(md);
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = safeName(title) + '.md';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   if (!open) return null;
 
   return (
@@ -339,6 +374,13 @@ export default function ChatPanel({ open, onClose, gridContext, flowRows }: Chat
                       ? <div className="chat-msg-content">{msg.content}</div>
                       : <div className="chat-msg-content md-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
                     }
+                    {msg.role === 'assistant' && (
+                      <div className="chat-msg-actions">
+                        <button className="chat-msg-act" onClick={() => handleCopyMd(msg.content)}>📋 Copy</button>
+                        <button className="chat-msg-act" onClick={() => handleDownloadHtml(msg.content)}>🌐 HTML</button>
+                        <button className="chat-msg-act" onClick={() => handleDownloadMd(msg.content)}>📄 Word</button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

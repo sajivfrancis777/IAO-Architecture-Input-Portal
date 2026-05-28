@@ -305,6 +305,29 @@
   border-bottom-left-radius: 4px;
 }
 
+/* ── Message export actions ──────────────────────────────────── */
+.chat-msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 0;
+}
+.chat-msg-act {
+  background: none;
+  border: 1px solid #e4e7eb;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #555;
+  transition: all 0.15s;
+}
+.chat-msg-act:hover {
+  border-color: #0071C5;
+  color: #0071C5;
+  background: #f0f8ff;
+}
+
 /* ── Markdown in assistant messages ──────────────────────────── */
 
 .chat-msg-content.md-content {
