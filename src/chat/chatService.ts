@@ -56,6 +56,7 @@ You help architects across 8 towers: FPR, OTC-IF, OTC-IP, FTS-IF, FTS-IP, PTP, M
    - Show a HIGH-LEVEL SUMMARY first (3-5 bullet points max)
    - For lists (RICEFW, interfaces, defects): show top 5-10 items and state the total count
    - Always end with guidance on where to find more detail
+   - **When Document Metrics are provided**, use those exact numbers (pass rates, object counts, completion %, RAID counts) in your response. Never estimate when actual metrics are available.
 3. **Never dump entire data sets.** Summarize, highlight key items, and reference the grid data.
 4. Keep answers concise and actionable. Target under 400 words.
 5. When generating diagrams, use Mermaid syntax compatible with the published SAD format.
@@ -952,6 +953,92 @@ function searchContextIndex(text: string): string {
 // PRE-BUILT DIAGRAM GENERATION (deterministic, same as DiagramPreview)
 // ══════════════════════════════════════════════════════════════════
 
+// ── Query Intent Detection ────────────────────────────────────
+type QueryIntent = 'ricefw' | 'testing' | 'defects' | 'readiness' | 'architecture' | 'dashboard' | 'raid' | 'cr' | 'bpmn';
+
+function detectIntent(text: string): Set<QueryIntent> {
+  const lower = text.toLowerCase();
+  const intents = new Set<QueryIntent>();
+  if (/ricefw|dev.?obj|development.?obj|custom|enhancement|report.*object|interface.*object|conversion|form|workflow/i.test(lower)) intents.add('ricefw');
+  if (/test|defect|bug|pass.?rate|execution|regression|qa/i.test(lower)) intents.add('testing');
+  if (/defect|bug|open.*issue|critical|severity|resolved/i.test(lower)) intents.add('defects');
+  if (/readiness|go.?live|process.?step|cutover|ready/i.test(lower)) intents.add('readiness');
+  if (/architect|sad|system.*design|data.*flow|integration.*flow|interface|landscape/i.test(lower)) intents.add('architecture');
+  if (/dashboard|metric|kpi|summary|program|overview|health/i.test(lower)) intents.add('dashboard');
+  if (/\braid\b|risk|issue|blocker|action.*item|dependency/i.test(lower)) intents.add('raid');
+  if (/\bcr\b|change.?request|scope.*change|descope/i.test(lower)) intents.add('cr');
+  if (/bpmn|process.*flow|business.*process|process.*step/i.test(lower)) intents.add('bpmn');
+  if (intents.size === 0) intents.add('architecture'); // default
+  return intents;
+}
+
+/** Intent-based formatting guidance injected into system prompt. */
+const INTENT_FORMAT_GUIDES: Record<QueryIntent, string> = {
+  ricefw: `## Output Format: RICEFW Analysis
+Respond concisely:
+- **Total Objects:** count (S4: X, ECA: Y)
+- **By Type:** table with R/I/C/E/F/W counts
+- **Completion:** FS %, Build %, FUT %
+- **Top 10 Objects:** table with ID, Name, Type, Status
+- **At Risk:** items not yet complete
+Ground ALL data in actual RICEFW content. Never fabricate object IDs.`,
+
+  testing: `## Output Format: Testing & Defects
+Respond concisely:
+- **Pass Rate:** X% (Y passed / Z total)
+- **Defect Summary:** table by severity (Open/Resolved/Total)
+- **Top 5 Open Defects:** table with ID, Severity, Summary
+- **Risk:** 1-2 sentences on release readiness
+Ground ALL data in actual testing content.`,
+
+  defects: `## Output Format: Defect Analysis
+Respond concisely:
+- **Defect Summary:** table by severity (Open/Resolved/Total)
+- **Top 10 Open Defects:** table with ID, Severity, Summary, Status
+- **Trends:** compare to prior phase if data available
+Ground ALL data in actual defect content.`,
+
+  readiness: `## Output Format: Process Readiness
+Respond concisely:
+- **Status:** Ready / Not Ready / Partial
+- **Key Gaps:** bullet list of items not yet ready
+- **Checklist:** Config ✓/✗ | Integration ✓/✗ | UAT ✓/✗ | Training ✓/✗
+Ground ALL data in actual readiness content.`,
+
+  architecture: `## Output Format: Architecture Summary
+Respond concisely:
+- **Overview:** 1-2 sentences on capability purpose
+- **Key Systems:** bullet list (max 6) with roles
+- **Critical Interfaces:** table with Source, Target, Type, Middleware (top 5)
+- **Observations:** 2-3 key gaps or risks
+Use only systems that appear in the provided context.`,
+
+  dashboard: `## Output Format: Dashboard Metrics
+Respond concisely:
+- **Headline Metrics:** total capabilities, overall completion %
+- **Tower Health:** table with Tower, Caps, Pass Rate, Open Defects
+- **Key Risks:** top 3 blockers or concerns
+Use actual metrics from Document Metrics context when available.`,
+
+  raid: `## Output Format: RAID Summary
+Respond concisely:
+- **Total Open:** count by type (Risk/Action/Issue/Dependency)
+- **By Severity:** P0: X, P1: Y, P2: Z
+- **Top Items:** table with RAID ID, Type, Severity, Title, Status (top 10)
+Ground in actual RAID data.`,
+
+  cr: `## Output Format: Change Request Summary
+Respond concisely:
+- **Total Active CRs:** count
+- **By Priority:** High: X, Medium: Y, Low: Z
+- **Top CRs:** table with CR ID, Priority, Title, Status, Tower (top 10)
+Ground in actual CR data.`,
+
+  bpmn: `## Output Format: BPMN Process
+When listing processes, use clickable links: [🔀 {ID} {Name}](#bpmn:{ID})
+When showing a single process, generate a Mermaid flowchart with decision gateways and SAP T-codes.`,
+};
+
 /** Detect if user message is requesting architecture diagrams. */
 function isDiagramRequest(text: string): boolean {
   const lower = text.toLowerCase();
@@ -1150,8 +1237,18 @@ export async function sendMessage(
   // Document metrics grounding: pre-extracted numbers from generated docs
   const docMetricsContext = getDocSummaryContext(userText);
 
+  // Detect query intent and inject formatting guidance
+  const intents = detectIntent(userText);
+  const formatGuides = [...intents]
+    .map(intent => INTENT_FORMAT_GUIDES[intent])
+    .filter(Boolean)
+    .slice(0, 2); // Max 2 format guides to avoid prompt bloat
+
   // Build system prompt with all grounding sources
   let systemPrompt = SYSTEM_PROMPT;
+  if (formatGuides.length > 0) {
+    systemPrompt += '\n\n' + formatGuides.join('\n\n');
+  }
   if (gridContext) {
     // Check if grid data is mostly empty template rows
     const hasRealData = gridContext.includes('|') && !/e\.g\. MES|e\.g\. XEUS/.test(gridContext.slice(0, 500));
