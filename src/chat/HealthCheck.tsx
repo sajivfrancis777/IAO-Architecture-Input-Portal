@@ -6,6 +6,7 @@ import {
   STATUS_ICON,
   runHealthChecks,
 } from './healthCheckUtils';
+import FileUpload from './FileUpload';
 
 /* ── FAB colour by overall status ────────────────────────────── */
 
@@ -21,6 +22,7 @@ const FAB_COLOUR: Record<CheckStatus, string> = {
 
 export default function HealthCheck() {
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'health' | 'upload'>('health');
   const [results, setResults] = useState<CheckResult[]>([]);
   const [report, setReport] = useState<HealthReport | null>(null);
   const [running, setRunning] = useState(false);
@@ -113,13 +115,16 @@ export default function HealthCheck() {
             borderRadius: 12,
             padding: 20,
             minWidth: 360,
-            maxWidth: 480,
+            maxWidth: 520,
             width: '90vw',
+            maxHeight: '80vh',
             boxShadow: '0 8px 32px rgba(0,0,0,.4)',
+            display: 'flex',
+            flexDirection: 'column',
           }}>
             {/* Header */}
             <div className="hc-header">
-              <h3 style={{ color: '#e0e0e0' }}>♥ System Health</h3>
+              <h3 style={{ color: '#e0e0e0' }}>♥ System Health &amp; Data</h3>
               <button
                 onClick={() => setOpen(false)}
                 style={{ background: 'none', border: 'none', color: '#e0e0e0', fontSize: 20, cursor: 'pointer' }}
@@ -128,56 +133,81 @@ export default function HealthCheck() {
               </button>
             </div>
 
-            {/* Progress bar */}
-            {running && (
-              <div className="hc-progress-bar">
-                <div
-                  className="hc-progress-fill"
-                  style={{ width: `${Math.round((results.length / 8) * 100)}%` }}
-                />
-              </div>
-            )}
-
-            {/* Results */}
-            <div className="hc-check-list" style={{ marginTop: 12 }}>
-              {results.map((r) => (
-                <div key={r.id} className={`hc-check-item ${r.status}`}>
-                  <span className="hc-check-icon">{STATUS_ICON[r.status]}</span>
-                  <div className="hc-check-body">
-                    <div className="hc-check-name">{r.label}</div>
-                    <div className="hc-check-detail">{r.detail}</div>
-                    {r.fix && r.status !== 'pass' && (
-                      <div className="hc-check-fix">💡 {r.fix}</div>
-                    )}
-                  </div>
-                  {r.durationMs > 0 && (
-                    <span className="hc-check-latency">{r.durationMs}ms</span>
-                  )}
-                </div>
-              ))}
+            {/* Tabs */}
+            <div className="hc-tabs">
+              <button
+                className={`hc-tab ${activeTab === 'health' ? 'active' : ''}`}
+                onClick={() => setActiveTab('health')}
+              >
+                ♥ Health
+              </button>
+              <button
+                className={`hc-tab ${activeTab === 'upload' ? 'active' : ''}`}
+                onClick={() => setActiveTab('upload')}
+              >
+                ⬆ Upload Data
+              </button>
             </div>
 
-            {/* Overall + timestamp */}
-            {report && (
-              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className={`hc-status-badge ${report.overallStatus}`}>
-                  {STATUS_ICON[report.overallStatus]} {report.overallStatus.toUpperCase()}
-                </span>
-                <span style={{ fontSize: 11, color: '#777' }}>
-                  {new Date(report.ranAt).toLocaleTimeString()}
-                </span>
-              </div>
-            )}
+            {/* Tab content */}
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {activeTab === 'health' ? (
+                <>
+                  {/* Progress bar */}
+                  {running && (
+                    <div className="hc-progress-bar">
+                      <div
+                        className="hc-progress-fill"
+                        style={{ width: `${Math.round((results.length / 8) * 100)}%` }}
+                      />
+                    </div>
+                  )}
 
-            {/* Re-run button */}
-            <button
-              className="hc-run-btn"
-              onClick={run}
-              disabled={running}
-              style={{ marginTop: 12 }}
-            >
-              {running ? <><span className="hc-spinning">◌</span> Running…</> : 'Re-run Checks'}
-            </button>
+                  {/* Results */}
+                  <div className="hc-check-list" style={{ marginTop: 12 }}>
+                    {results.map((r) => (
+                      <div key={r.id} className={`hc-check-item ${r.status}`}>
+                        <span className="hc-check-icon">{STATUS_ICON[r.status]}</span>
+                        <div className="hc-check-body">
+                          <div className="hc-check-name">{r.label}</div>
+                          <div className="hc-check-detail">{r.detail}</div>
+                          {r.fix && r.status !== 'pass' && (
+                            <div className="hc-check-fix">💡 {r.fix}</div>
+                          )}
+                        </div>
+                        {r.durationMs > 0 && (
+                          <span className="hc-check-latency">{r.durationMs}ms</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Overall + timestamp */}
+                  {report && (
+                    <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className={`hc-status-badge ${report.overallStatus}`}>
+                        {STATUS_ICON[report.overallStatus]} {report.overallStatus.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#777' }}>
+                        {new Date(report.ranAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Re-run button */}
+                  <button
+                    className="hc-run-btn"
+                    onClick={run}
+                    disabled={running}
+                    style={{ marginTop: 12 }}
+                  >
+                    {running ? <><span className="hc-spinning">◌</span> Running…</> : 'Re-run Checks'}
+                  </button>
+                </>
+              ) : (
+                <FileUpload />
+              )}
+            </div>
           </div>
         </div>
       )}
