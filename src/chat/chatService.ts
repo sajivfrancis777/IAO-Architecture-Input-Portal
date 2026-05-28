@@ -40,7 +40,7 @@ const DEFAULT_CONFIG: LLMConfig = {
   apiKey: import.meta.env.VITE_AZURE_OPENAI_KEY ?? '',
   model: 'gpt-5.4-mini',
   endpoint: import.meta.env.VITE_AZURE_OPENAI_ENDPOINT ?? 'https://sajiv-moknxo97-eastus2.cognitiveservices.azure.com/openai/deployments/gpt-5.4-mini/chat/completions?api-version=2024-12-01-preview',
-  maxTokens: 1024,
+  maxTokens: 2048,
   temperature: 0.3,
 };
 
@@ -613,12 +613,17 @@ function searchContextIndex(text: string): string {
 
   // Program health queries (RAID, defects, RICEFW, CRs) don't need system/cap context
   const programHealthRe = /\b(raid|risk|issue|action|blocker|defect|bug|test|ricefw|change request|CR\b|readiness|go.?no.?go)/i;
-  if (systems.length === 0 && capIds.length === 0 && !programHealthRe.test(text)) return '';
+  const isProgramHealthQuery = programHealthRe.test(text);
+  if (systems.length === 0 && capIds.length === 0 && !isProgramHealthQuery) return '';
+
+  // When the primary intent is program-health (RAID, defects, CRs), skip flow data injection
+  // to avoid wasting context budget on irrelevant flow rows.
+  const skipFlowData = isProgramHealthQuery && !(/architect|diagram|flow|integration|interface|landscape/i.test(text));
 
   const parts: string[] = [];
 
   // Find flows involving mentioned systems across ALL capabilities
-  if (systems.length > 0 && contextIndex.flowIndex) {
+  if (!skipFlowData && systems.length > 0 && contextIndex.flowIndex) {
     const sysSet = new Set(systems.map(s => s.toUpperCase()));
     const matchingFlows = contextIndex.flowIndex.filter(f =>
       sysSet.has((f.source || '').toUpperCase()) || sysSet.has((f.target || '').toUpperCase())
@@ -700,8 +705,8 @@ function searchContextIndex(text: string): string {
       if (!cap) continue;
       parts.push(`### ${cid} — ${cap.name} (${cap.tower})\n**Group:** ${cap.group} | **Systems:** ${cap.systems.join(', ')} | **Flow Count:** ${cap.flowCount}`);
 
-      // Pull actual flow rows for this capability from the flow index
-      if (contextIndex.flowIndex) {
+      // Pull actual flow rows for this capability from the flow index (skip for RAID/health queries)
+      if (!skipFlowData && contextIndex.flowIndex) {
         let capFlows = contextIndex.flowIndex.filter(f => f.cap === cid);
         // Apply release/state filters if user specified them
         if (release) capFlows = capFlows.filter(f => f.release?.toUpperCase() === release);
@@ -792,12 +797,12 @@ function searchContextIndex(text: string): string {
       let section = `### Active RAID Items (${raidItems.length} matching)\n`;
       section += '| RAID ID | Type | Severity | Title | Status | Team | Due Date | Days Past Due |\n';
       section += '|---------|------|----------|-------|--------|------|----------|---------------|\n';
-      const maxRaid = Math.min(raidItems.length, 30);
+      const maxRaid = Math.min(raidItems.length, 50);
       for (let i = 0; i < maxRaid; i++) {
         const r = raidItems[i];
         section += `| ${r.raidId} | ${r.type} | ${r.severity} | ${r.title} | ${r.status} | ${r.team} | ${r.dueDate} | ${r.daysPastDue} |\n`;
       }
-      if (raidItems.length > 30) section += `| … | | | ${raidItems.length - 30} more items | | | | |\n`;
+      if (raidItems.length > 50) section += `| … | | | ${raidItems.length - 50} more items | | | | |\n`;
       parts.push(section);
     }
   }
@@ -954,7 +959,7 @@ function searchContextIndex(text: string): string {
   }
 
   const result = parts.join('\n\n---\n\n');
-  return result.length > 16000 ? result.slice(0, 16000) + '\n\n…(context truncated)' : result;
+  return result.length > 24000 ? result.slice(0, 24000) + '\n\n…(context truncated)' : result;
 }
 
 // ══════════════════════════════════════════════════════════════════
