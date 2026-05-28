@@ -768,9 +768,9 @@ function searchContextIndex(text: string): string {
     }
 
     // Filter by severity only when explicitly requesting ONLY that severity
-    // Words like "highlight", "flag", "call out" indicate emphasis, not exclusion
-    const severityFilterIntent = /\b(only|just|exclusively|filter to|show me)\b.*\b(p[12]|high|medium|critical)\b/i.test(text)
-      || (/\b(p[12]|high|medium|critical)\b/i.test(text) && !/\b(highlight|flag|call.?out|anything|also|and)\b/i.test(text));
+    // Words like "highlight", "flag", "call out", "show me" indicate emphasis, not exclusion
+    const severityFilterIntent = /\b(only|just|exclusively|filter to)\b.*\b(p[12]|high|medium|critical)\b/i.test(text)
+      || (/\b(p[12]|high|medium|critical)\b/i.test(text) && !/\b(highlight|flag|call.?out|show me|anything|also|and)\b/i.test(text));
     if (severityFilterIntent) {
       if (/\b(p1|high|critical)\b/i.test(text)) {
         raidItems = raidItems.filter(r => r.severity.includes('P1') || r.severity.toLowerCase().includes('high'));
