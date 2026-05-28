@@ -349,6 +349,7 @@ interface RaidEntry {
   daysPastDue: string;
   release: string;
   deliverableId: string;
+  towers?: string[];
 }
 
 interface JiraSummary {
@@ -758,7 +759,9 @@ function searchContextIndex(text: string): string {
     }
     if (towerFilter && raidItems.length === contextIndex.raidIndex.length) {
       // Only apply tower filter if deliverableId filter didn't narrow it
+      // Check both the towers array (from tower resolution) and team field
       raidItems = raidItems.filter(r =>
+        (r.towers && r.towers.some(t => t.toUpperCase() === towerFilter)) ||
         r.team.toUpperCase().includes(towerFilter!.replace('-', ' ')) ||
         r.team.toUpperCase().includes(towerFilter!)
       );
