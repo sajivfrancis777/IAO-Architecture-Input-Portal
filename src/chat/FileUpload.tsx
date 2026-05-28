@@ -5,11 +5,15 @@
  * via the GitHub Contents API. Once committed, the deploy-pages workflow
  * triggers automatically and fresh data propagates to the live site.
  *
- * Supported upload targets:
+ * Supported upload targets (8 files across 7 folders):
  *   - Object Tracker (XLSX/CSV) → data/smartsheet/manual/object_trackers/
- *   - Transport Objects (CSV)   → data/smartsheet/manual/object_trackers/
- *   - RAID Log (CSV/XLSX)       → data/smartsheet/manual/raid/
+ *   - ECA Object Tracker (XLSX) → data/smartsheet/manual/eca_objects/
+ *   - Master RAID Log (XLSX)    → data/smartsheet/manual/raid/
+ *   - E2E RAID Log (XLSX)       → data/smartsheet/manual/raid/
  *   - Request Console (XLSX)    → data/smartsheet/manual/request_console/
+ *   - Change Request Log (XLSX) → data/smartsheet/manual/change_requests/
+ *   - Deliverables Tracker (XLSX) → data/smartsheet/manual/boundary_apps/
+ *   - Integrated Plan (XLSX)    → data/smartsheet/manual/timelines/
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -32,34 +36,66 @@ interface UploadTarget {
 const UPLOAD_TARGETS: UploadTarget[] = [
   {
     id: 'object-tracker',
-    label: 'Object Tracker',
-    description: 'S4 R3 Object Tracker (XLSX or CSV)',
+    label: 'S4 Object Tracker',
+    description: 'S4 [R3] Intel IDM Object Tracker',
     repoPath: 'data/smartsheet/manual/object_trackers',
     accept: '.xlsx,.csv',
     maxSizeMB: 10,
   },
   {
-    id: 'transport-objects',
-    label: 'Transport Objects',
-    description: 'Transport objects all systems (CSV)',
-    repoPath: 'data/smartsheet/manual/object_trackers',
-    accept: '.csv',
-    maxSizeMB: 15,
+    id: 'eca-object-tracker',
+    label: 'ECA Object Tracker',
+    description: 'ECA [R3] IDM Object Tracker',
+    repoPath: 'data/smartsheet/manual/eca_objects',
+    accept: '.xlsx,.csv',
+    maxSizeMB: 10,
   },
   {
-    id: 'raid-log',
-    label: 'RAID Log',
-    description: 'Master RAID log (CSV or XLSX)',
+    id: 'master-raid-log',
+    label: 'Master RAID Log',
+    description: 'IAO Master RAID Log',
     repoPath: 'data/smartsheet/manual/raid',
-    accept: '.csv,.xlsx',
+    accept: '.xlsx,.csv',
+    maxSizeMB: 5,
+  },
+  {
+    id: 'e2e-raid-log',
+    label: 'E2E RAID Log',
+    description: 'E2E RAID Log',
+    repoPath: 'data/smartsheet/manual/raid',
+    accept: '.xlsx,.csv',
     maxSizeMB: 5,
   },
   {
     id: 'request-console',
     label: 'RICEFW Request Console',
-    description: 'Intel IDM 2.0 RICEFW Request Console (XLSX)',
+    description: 'Intel IDM 2.0 RICEFW Request Console',
     repoPath: 'data/smartsheet/manual/request_console',
-    accept: '.xlsx',
+    accept: '.xlsx,.csv',
+    maxSizeMB: 10,
+  },
+  {
+    id: 'change-request-log',
+    label: 'Change Request Log',
+    description: 'IDM 2.0 Program Change Request Log',
+    repoPath: 'data/smartsheet/manual/change_requests',
+    accept: '.xlsx,.csv',
+    maxSizeMB: 10,
+  },
+  {
+    id: 'deliverables-tracker',
+    label: 'Deliverables Tracker',
+    description: 'IDM 2.0 Deliverables Log & Sign off Tracker',
+    repoPath: 'data/smartsheet/manual/boundary_apps',
+    accept: '.xlsx,.csv',
+    maxSizeMB: 5,
+  },
+  {
+    id: 'integrated-plan',
+    label: 'Integrated Plan',
+    description: 'IDM 2.0 Integrated Plan',
+    repoPath: 'data/smartsheet/manual/timelines',
+    accept: '.xlsx,.csv',
     maxSizeMB: 10,
   },
 ];
